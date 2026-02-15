@@ -133,6 +133,18 @@ python3 extract_errors.py --auto
 
 Results are printed to the terminal and written to **error_report.txt** in the same folder.
 
+### 6. (Optional) Run the web UI
+
+A simple frontend lets you set env vars and run the same checks from the browser:
+
+```bash
+cd Observe
+pip install -r requirements.txt   # includes Flask
+python3 app.py
+```
+
+Open **http://localhost:5000**. Enter **OBSERVE_CUSTOMER_ID** and **OBSERVE_API_KEY** (required), optionally expand and set cluster, workspace, dataset, region, and time range. Choose a run mode (Single service, All services, All regions, or Auto) and click **Run dashboard check**. The report appears on the page; you can copy or download it.
+
 ---
 
 ## Quick reference
@@ -143,6 +155,7 @@ Results are printed to the terminal and written to **error_report.txt** in the s
 | Config | `cd Observe` → `cp env.sample .env` → set **OBSERVE_CUSTOMER_ID** and **OBSERVE_API_KEY** |
 | Run | Load `.env`, then `python3 extract_errors.py --all-services` (or `--auto`) |
 | Output | Terminal + `Observe/error_report.txt` |
+| **Web UI** | `cd Observe && python3 app.py` → open http://localhost:5000 ([details](#6-optional-run-the-web-ui)) |
 | **Docker** | `docker build -t observe-extract-errors Observe` then `docker run --rm --env-file .env observe-extract-errors` ([details](#running-with-docker)) |
 
 ---

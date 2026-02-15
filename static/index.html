@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Observe Dashboard Check</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f1116;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79b8ff;
+      --required: #f85149;
+      --success: #3fb950;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+    h1 {
+      font-weight: 600;
+      font-size: 1.5rem;
+      margin-bottom: 0.25rem;
+    }
+    .subtitle { color: var(--text-muted); margin-bottom: 2rem; }
+    section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+    }
+    section h2 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin: 0 0 1rem 0;
+    }
+    .grid {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    }
+    .field { display: flex; flex-direction: column; gap: 0.35rem; }
+    .field.full { grid-column: 1 / -1; }
+    label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    label.required { color: var(--required); }
+    label.required::after { content: ' *'; }
+    input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+    }
+    input::placeholder { color: var(--text-muted); opacity: 0.7; }
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+    }
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .btn-mode {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .btn-mode:hover { border-color: var(--accent); background: rgba(88, 166, 255, 0.08); }
+    .btn-mode.active {
+      border-color: var(--accent);
+      background: rgba(88, 166, 255, 0.15);
+      color: var(--accent);
+    }
+    .btn-run {
+      padding: 0.65rem 1.5rem;
+      border-radius: 6px;
+      border: none;
+      background: var(--accent);
+      color: var(--bg);
+      font-family: inherit;
+      font-weight: 500;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-run:hover { background: var(--accent-hover); }
+    .btn-run:disabled { opacity: 0.5; cursor: not-allowed; }
+    .output-wrap {
+      margin-top: 1.5rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .output-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0.75rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .output-actions { display: flex; gap: 0.5rem; }
+    .btn-copy, .btn-dl {
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .btn-copy:hover, .btn-dl:hover { color: var(--text); border-color: var(--text-muted); }
+    #report {
+      margin: 0;
+      padding: 1rem;
+      max-height: 70vh;
+      overflow: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #report.empty { color: var(--text-muted); }
+    .report-tables { padding: 1rem; max-height: 70vh; overflow: auto; }
+    .report-tables table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 1.5rem; }
+    .report-tables th, .report-tables td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; }
+    .report-tables th { background: var(--surface); color: var(--text-muted); font-weight: 500; }
+    .report-tables tr:hover td { background: rgba(88, 166, 255, 0.04); }
+    .report-tables .col-ts { white-space: nowrap; width: 1%; }
+    .report-tables .col-count { white-space: nowrap; width: 1%; text-align: right; }
+    .report-tables .col-msg { max-width: 400px; word-break: break-word; }
+    .report-tables .col-link { white-space: nowrap; max-width: 120px; }
+    .report-tables .col-link a { color: var(--accent); text-decoration: none; }
+    .report-tables .col-link a:hover { text-decoration: underline; }
+    .report-tables .section-title { font-weight: 600; color: var(--text-muted); margin: 1rem 0 0.5rem 0; font-size: 0.9rem; }
+    .report-tables .section-title:first-child { margin-top: 0; }
+    .report-context {
+      padding: 0.5rem 0.75rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .report-tables .col-region, .report-tables .col-svc { white-space: nowrap; }
+    .status {
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-top: 1rem;
+    }
+    .status.loading { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
+    .status.error { background: rgba(248, 81, 73, 0.15); color: #ff7b72; }
+    .status.success { background: rgba(63, 185, 80, 0.15); color: var(--success); }
+    .loading-block {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 220px;
+      padding: 2rem;
+      gap: 1.25rem;
+    }
+    .loading-spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .loading-text { color: var(--text); font-weight: 500; font-size: 15px; }
+    .loading-sub { color: var(--text-muted); font-size: 13px; }
+    .loading-skeleton {
+      width: 100%;
+      max-width: 400px;
+      margin-top: 0.5rem;
+    }
+    .loading-skeleton span {
+      display: block;
+      height: 10px;
+      background: linear-gradient(90deg, var(--border) 25%, var(--surface) 50%, var(--border) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s ease-in-out infinite;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    .loading-skeleton span:nth-child(1) { width: 95%; }
+    .loading-skeleton span:nth-child(2) { width: 70%; }
+    .loading-skeleton span:nth-child(3) { width: 85%; }
+    @keyframes shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    .optional-toggle {
+      font-size: 0.85rem;
+      color: var(--accent);
+      cursor: pointer;
+      margin-bottom: 0.75rem;
+      user-select: none;
+    }
+    .optional-toggle:hover { text-decoration: underline; }
+    .optional-fields { margin-top: 0.5rem; }
+    .optional-fields.hidden { display: none; }
+    select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      min-width: 200px;
+    }
+    select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .service-row { margin-top: 0.75rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Contentstack Launch Observe Dashboard Check</h1>
+    <p class="subtitle">Set your env vars, pick a run mode, and run the full dashboard check.</p>
+
+    <section>
+      <h2>Environment</h2>
+      <div class="grid">
+        <div class="field">
+          <label class="required" for="customerId">OBSERVE_CUSTOMER_ID</label>
+          <input id="customerId" type="text" placeholder="Your customer ID" autocomplete="off">
+        </div>
+        <div class="field">
+          <label class="required" for="apiKey">OBSERVE_API_KEY</label>
+          <input id="apiKey" type="password" placeholder="Your API key" autocomplete="off">
+        </div>
+        <div class="field optional-fields hidden" id="optionalEnv">
+          <label for="cluster">OBSERVE_CLUSTER</label>
+          <input id="cluster" type="text" placeholder="e.g. eu-1" value="eu-1">
+        </div>
+        <div class="field optional-fields hidden">
+          <label for="region">REGION</label>
+          <input id="region" type="text" placeholder="e.g. aws-na" value="aws-na">
+        </div>
+        <div class="field optional-fields hidden full">
+          <label for="startIst">START_IST (YYYY-MM-DD HH:MM:SS)</label>
+          <input id="startIst" type="text" placeholder="Optional start time IST">
+        </div>
+        <div class="field optional-fields hidden full">
+          <label for="endIst">END_IST (YYYY-MM-DD HH:MM:SS)</label>
+          <input id="endIst" type="text" placeholder="Optional end time IST">
+        </div>
+      </div>
+      <div class="optional-toggle" id="toggleOptional">Show optional env vars</div>
+    </section>
+
+    <section>
+      <h2>Run mode</h2>
+      <p style="color: var(--text-muted); margin-bottom: 0.75rem;">Same options as CLI flags. Choose one.</p>
+      <div class="buttons" role="group" aria-label="Run mode">
+        <button type="button" class="btn-mode active" data-mode="single">Single service</button>
+        <button type="button" class="btn-mode" data-mode="all_services">All services</button>
+        <button type="button" class="btn-mode" data-mode="all_regions">All regions</button>
+        <button type="button" class="btn-mode" data-mode="auto">Auto (all services × all regions)</button>
+      </div>
+      <div class="field service-row" id="serviceRow">
+        <label for="serviceSelect">Service</label>
+        <select id="serviceSelect">
+          <option value="">Loading…</option>
+        </select>
+      </div>
+    </section>
+
+    <div>
+      <button type="button" class="btn-run" id="btnRun">Run dashboard check</button>
+    </div>
+
+    <div id="status" class="status" style="display: none;"></div>
+    <div class="output-wrap" style="margin-top: 1rem;">
+      <div class="output-header">
+        <span>Report</span>
+        <div class="output-actions">
+          <button type="button" class="btn-copy" id="btnCopy">Copy</button>
+          <button type="button" class="btn-dl" id="btnDownload">Download</button>
+        </div>
+      </div>
+      <div id="reportWrap">
+        <pre id="report" class="empty">Run a check to see the report here.</pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const customerId = document.getElementById('customerId');
+    const apiKey = document.getElementById('apiKey');
+    const cluster = document.getElementById('cluster');
+    const region = document.getElementById('region');
+    const startIst = document.getElementById('startIst');
+    const endIst = document.getElementById('endIst');
+    const toggleOptional = document.getElementById('toggleOptional');
+    const btnRun = document.getElementById('btnRun');
+    const btnCopy = document.getElementById('btnCopy');
+    const btnDownload = document.getElementById('btnDownload');
+    const statusEl = document.getElementById('status');
+    const serviceSelect = document.getElementById('serviceSelect');
+    const serviceRow = document.getElementById('serviceRow');
+    const reportWrap = document.getElementById('reportWrap');
+
+    const STORAGE_CUSTOMER_ID = 'observe_customer_id';
+    const STORAGE_API_KEY = 'observe_api_key';
+
+    try {
+      const savedCid = localStorage.getItem(STORAGE_CUSTOMER_ID);
+      const savedKey = localStorage.getItem(STORAGE_API_KEY);
+      if (savedCid) customerId.value = savedCid;
+      if (savedKey) apiKey.value = savedKey;
+    } catch (e) {}
+
+    function saveCredentials() {
+      try {
+        const cid = customerId.value.trim();
+        const key = apiKey.value.trim();
+        if (cid) localStorage.setItem(STORAGE_CUSTOMER_ID, cid);
+        if (key) localStorage.setItem(STORAGE_API_KEY, key);
+      } catch (e) {}
+    }
+
+    customerId.addEventListener('blur', saveCredentials);
+    apiKey.addEventListener('blur', saveCredentials);
+
+    let currentMode = 'single';
+    let servicesList = [];
+    let lastReportText = '';
+    let lastReportSections = null;
+    let lastRunContext = null;
+
+    function parseReportTables(text) {
+      if (!text || !text.trim()) return null;
+      const lines = text.split('\n');
+      const sections = [];
+      let i = 0;
+      let currentRegion = null;
+      while (i < lines.length) {
+        const sectionTitleMatch = lines[i].match(/^=== (.+?) ===\s*$/);
+        if (sectionTitleMatch) {
+          const title = sectionTitleMatch[1];
+          const regionMatch = title.match(/^Region:\s*(.+)$/);
+          if (regionMatch) {
+            currentRegion = regionMatch[1].trim();
+            i++;
+            continue;
+          }
+          i++;
+          if (i >= lines.length) break;
+        }
+        const sepLine = lines[i];
+        if (!/^\+[\-\+]+\+$/.test(sepLine)) {
+          i++;
+          continue;
+        }
+        const widths = sepLine.split('+').filter(Boolean).map(s => Math.max(0, s.length - 2));
+        if (widths.length < 3) {
+          i++;
+          continue;
+        }
+        i++;
+        if (i >= lines.length) break;
+        const headerLine = lines[i];
+        if (!headerLine.startsWith('| ')) {
+          i++;
+          continue;
+        }
+        i++;
+        if (i >= lines.length) break;
+        if (!/^\+[\-\+]+\+$/.test(lines[i])) {
+          i++;
+          continue;
+        }
+        i++;
+        const rows = [];
+        while (i < lines.length && lines[i].startsWith('| ')) {
+          const line = lines[i];
+          let start = 2;
+          const cells = [];
+          for (let w of widths) {
+            const cell = line.substring(start, start + w).trim();
+            cells.push(cell);
+            start += w + 3;
+          }
+          rows.push(cells);
+          i++;
+        }
+        if (rows.length > 0) {
+          sections.push({
+            title: sectionTitleMatch ? sectionTitleMatch[1] : null,
+            region: currentRegion,
+            headers: ['IST Timestamp', 'Count', 'Error & Context', 'Link'].slice(0, widths.length),
+            rows
+          });
+        }
+      }
+      return sections.length ? sections : null;
+    }
+
+    function getRunContextSummary() {
+      const r = region.value.trim() || 'aws-na';
+      let svc = '';
+      if (currentMode === 'single') svc = serviceSelect.value.trim() || '—';
+      else if (currentMode === 'auto') svc = 'All services × All regions';
+      else if (currentMode === 'all_services') svc = 'All services';
+      else if (currentMode === 'all_regions') svc = 'All services × All regions';
+      else svc = '—';
+      return { region: r, service: svc };
+    }
+
+    function renderReportAsHtml(text) {
+      const sections = parseReportTables(text);
+      lastReportSections = sections;
+      if (!sections) return null;
+      const ctx = lastRunContext || getRunContextSummary();
+      const parts = [];
+      parts.push('<div class="report-context"><strong>Region:</strong> ' + escapeHtml(ctx.region) + ' &nbsp;|&nbsp; <strong>Service:</strong> ' + escapeHtml(ctx.service) + '</div>');
+      parts.push('<div class="report-tables">');
+      for (const sec of sections) {
+        const secRegion = sec.region != null ? sec.region : ctx.region;
+        const secTitle = sec.title != null ? sec.title : (ctx.service !== '—' ? ctx.service : '—');
+        if (sec.title || ctx.service) parts.push('<div class="section-title">' + escapeHtml(sec.title || ctx.service || '') + (secRegion ? ' · ' + escapeHtml(secRegion) : '') + '</div>');
+        parts.push('<table><thead><tr><th>Region</th><th>Service</th>');
+        for (const h of sec.headers) parts.push('<th>' + escapeHtml(h) + '</th>');
+        parts.push('</tr></thead><tbody>');
+        const colClass = ['col-ts', 'col-count', 'col-msg', 'col-link'];
+        for (const row of sec.rows) {
+          parts.push('<tr>');
+          parts.push('<td class="col-region">' + escapeHtml(secRegion) + '</td>');
+          parts.push('<td class="col-svc">' + escapeHtml(secTitle) + '</td>');
+          row.forEach((cell, idx) => {
+            const cls = colClass[idx] || '';
+            if (idx === row.length - 1 && cell.startsWith('http')) {
+              parts.push('<td class="' + cls + '"><a href="' + escapeHtml(cell) + '" target="_blank" rel="noopener">Open</a></td>');
+            } else {
+              parts.push('<td class="' + cls + '">' + escapeHtml(cell) + '</td>');
+            }
+          });
+          parts.push('</tr>');
+        }
+        parts.push('</tbody></table>');
+      }
+      parts.push('</div>');
+      return parts.join('');
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function escapeCsvField(s) {
+      if (s == null) return '';
+      const t = String(s);
+      if (/[",\r\n]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
+      return t;
+    }
+
+    function reportToCsv(sections) {
+      const ctx = lastRunContext || getRunContextSummary();
+      const header = ['Region', 'Service', 'IST Timestamp', 'Count', 'Error & Context', 'Link'];
+      const rows = [header.map(escapeCsvField).join(',')];
+      for (const sec of sections) {
+        const secRegion = sec.region != null ? sec.region : ctx.region;
+        const title = sec.title || '';
+        for (const row of sec.rows) {
+          rows.push([secRegion, title, ...row].map(escapeCsvField).join(','));
+        }
+      }
+      return rows.join('\r\n');
+    }
+
+    fetch('/api/services')
+      .then(r => r.json())
+      .then(services => {
+        servicesList = services || [];
+        serviceSelect.innerHTML = '<option value="">Select a service</option>' +
+          servicesList.map(s => '<option value="' + (s.name || s.service_name || '').replace(/"/g, '&quot;') + '">' + (s.name || s.service_name || '') + '</option>').join('');
+      })
+      .catch(() => {
+        serviceSelect.innerHTML = '<option value="">Failed to load services</option>';
+      });
+
+    document.querySelectorAll('.btn-mode').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.btn-mode').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentMode = btn.dataset.mode;
+        serviceRow.style.display = currentMode === 'single' ? 'flex' : 'none';
+      });
+    });
+    serviceRow.style.display = 'flex';
+
+    toggleOptional.addEventListener('click', () => {
+      const optional = document.querySelectorAll('.optional-fields');
+      const isHidden = optional[0].classList.contains('hidden');
+      optional.forEach(el => el.classList.toggle('hidden', !isHidden));
+      toggleOptional.textContent = isHidden ? 'Hide optional env vars' : 'Show optional env vars';
+    });
+
+    function showStatus(msg, type) {
+      statusEl.style.display = 'block';
+      statusEl.className = 'status ' + type;
+      statusEl.textContent = msg;
+    }
+
+    function hideStatus() {
+      statusEl.style.display = 'none';
+    }
+
+    btnRun.addEventListener('click', async () => {
+      const cid = customerId.value.trim();
+      const key = apiKey.value.trim();
+      if (!cid || !key) {
+        showStatus('Please set OBSERVE_CUSTOMER_ID and OBSERVE_API_KEY.', 'error');
+        return;
+      }
+      if (currentMode === 'single' && !serviceSelect.value.trim()) {
+        showStatus('Please select a service.', 'error');
+        return;
+      }
+
+      const env = {
+        OBSERVE_CUSTOMER_ID: cid,
+        OBSERVE_API_KEY: key,
+      };
+      if (cluster.value.trim()) env.OBSERVE_CLUSTER = cluster.value.trim();
+      if (region.value.trim()) env.REGION = region.value.trim();
+      if (startIst.value.trim()) env.START_IST = startIst.value.trim();
+      if (endIst.value.trim()) env.END_IST = endIst.value.trim();
+
+      const options = {};
+      if (currentMode === 'all_services') options.all_services = true;
+      else if (currentMode === 'all_regions') options.all_regions = true;
+      else if (currentMode === 'auto') options.auto = true;
+      if (currentMode === 'single') {
+        const svc = serviceSelect.value.trim();
+        if (svc) options.service = svc;
+      }
+      if (startIst.value.trim()) options.start = startIst.value.trim();
+      if (endIst.value.trim()) options.end = endIst.value.trim();
+
+      saveCredentials();
+      lastReportText = '';
+      lastReportSections = null;
+      lastRunContext = getRunContextSummary();
+      reportWrap.innerHTML = '<div class="loading-block">' +
+        '<div class="loading-spinner"></div>' +
+        '<div class="loading-text">Running dashboard check</div>' +
+        '<div class="loading-sub">Fetching errors from Observe… This may take a minute for multiple services.</div>' +
+        '<div class="loading-skeleton"><span></span><span></span><span></span></div>' +
+        '</div>';
+      showStatus('Running…', 'loading');
+      btnRun.disabled = true;
+
+      try {
+        const res = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ env, options }),
+        });
+        const data = await res.json();
+        hideStatus();
+        btnRun.disabled = false;
+
+        const reportContent = data.report || (data.error && data.report) || '';
+        lastReportText = reportContent;
+
+        if (data.error) {
+          showStatus(data.error, 'error');
+          lastReportSections = null;
+          const html = reportContent ? renderReportAsHtml(reportContent) : null;
+          if (html) {
+            reportWrap.innerHTML = html;
+          } else {
+            reportWrap.innerHTML = '<pre id="report">' + (reportContent ? escapeHtml(reportContent) : '') + '</pre>';
+          }
+          return;
+        }
+
+        showStatus('Done.', 'success');
+        const html = renderReportAsHtml(reportContent);
+        if (html) {
+          reportWrap.innerHTML = html;
+        } else {
+          lastReportSections = null;
+          reportWrap.innerHTML = '<pre id="report">' + (reportContent ? escapeHtml(reportContent) : 'No errors found.') + '</pre>';
+        }
+      } catch (err) {
+        hideStatus();
+        btnRun.disabled = false;
+        showStatus('Request failed: ' + err.message, 'error');
+      }
+    });
+
+    function copyReportToClipboard() {
+      if (!lastReportText) return false;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(lastReportText)
+          .then(() => true)
+          .catch(() => fallbackCopy());
+      }
+      return Promise.resolve(fallbackCopy());
+    }
+
+    function fallbackCopy() {
+      const ta = document.createElement('textarea');
+      ta.value = lastReportText;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch (e) {
+        document.body.removeChild(ta);
+        return false;
+      }
+    }
+
+    btnCopy.addEventListener('click', () => {
+      if (!lastReportText) {
+        return;
+      }
+      copyReportToClipboard().then(ok => {
+        const t = btnCopy.textContent;
+        btnCopy.textContent = ok ? 'Copied' : 'Copy failed';
+        setTimeout(() => { btnCopy.textContent = t; }, 1500);
+      });
+    });
+
+    btnDownload.addEventListener('click', () => {
+      if (lastReportSections && lastReportSections.length > 0) {
+        const csv = reportToCsv(lastReportSections);
+        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'error_report.csv';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } else if (lastReportText) {
+        const blob = new Blob([lastReportText], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'error_report.txt';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }
+    });
+  </script>
+</body>
+</html>

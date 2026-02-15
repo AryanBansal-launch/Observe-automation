@@ -229,7 +229,10 @@ if __name__ == "__main__":
     parser.add_argument("--all-services", action="store_true", help=f"Run for all services (uses {DEFAULT_SERVICES_CONFIG} next to this script, or in cwd)")
     parser.add_argument("--all-regions", action="store_true", help="Run for all regions (aws-na, aws-eu, aws-au, azure-na, azure-eu, gcp-na, gcp-eu); combines with --config/--all-services or single-service")
     parser.add_argument("--auto", action="store_true", help="Same as --all-services --all-regions (all services × all regions)")
+    parser.add_argument("--output", "-o", type=str, default=None, help="Output report file path (default: error_report.txt)")
     args = parser.parse_args()
+
+    out_file = args.output or OUTPUT_REPORT_FILE
 
     if args.auto:
         args.all_services = True
@@ -288,12 +291,12 @@ if __name__ == "__main__":
                 print(s)
                 all_out.append(s)
         if all_out:
-            with open(OUTPUT_REPORT_FILE, "w") as f:
+            with open(out_file, "w") as f:
                 f.write("\n".join(all_out))
     else:
         all_out = run_services(region_override=None)
         for s in all_out:
             print(s)
         if all_out:
-            with open(OUTPUT_REPORT_FILE, "w") as f:
+            with open(out_file, "w") as f:
                 f.write("\n".join(all_out))

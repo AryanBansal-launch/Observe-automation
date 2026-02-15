@@ -47,7 +47,6 @@
     section h2 {
       font-size: 0.85rem;
       font-weight: 600;
-      text-transform: uppercase;
       letter-spacing: 0.04em;
       color: var(--text-muted);
       margin: 0 0 1rem 0;
@@ -239,6 +238,23 @@
     .optional-toggle:hover { text-decoration: underline; }
     .optional-fields { margin-top: 0.5rem; }
     .optional-fields.hidden { display: none; }
+    .help-link { font-size: 0.8rem; font-weight: 400; color: var(--accent); text-decoration: none; margin-left: 0.5rem; }
+    .help-link:hover { text-decoration: underline; }
+    .help-block {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-muted);
+    }
+    .help-block h3 { font-size: 0.85rem; color: var(--text); margin: 0 0 0.5rem 0; }
+    .help-block h3:not(:first-child) { margin-top: 1rem; }
+    .help-block p { margin: 0 0 0.5rem 0; }
+    .help-block code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--surface); padding: 0.1em 0.35em; border-radius: 4px; }
+    .help-block.hidden { display: none; }
     select {
       background: var(--bg);
       border: 1px solid var(--border);
@@ -263,14 +279,24 @@
     <p class="subtitle">Set your env vars, pick a run mode, and run the full dashboard check.</p>
 
     <section>
-      <h2>Environment</h2>
+      <h2>Environment <a href="#" class="help-link" id="helpLink">How do I get API key &amp; Customer ID?</a></h2>
+      <div class="help-block hidden" id="helpBlock">
+        <h3>Customer ID (OBSERVE_CUSTOMER_ID)</h3>
+        <p>1. Open your Observe workspace in the browser (e.g. your Observe URL).<br>
+        2. The <strong>Customer ID</strong> is the first part of the URL before <code>.observeinc.com</code> — the numbers (and sometimes cluster).<br>
+        Example: from <code>https://143110822295.eu-1.observeinc.com/workspace/...</code> → Customer ID is <strong>143110822295</strong> (the numeric part before the cluster).</p>
+        <h3>API token (OBSERVE_API_KEY)</h3>
+        <p>1. In Observe, go to <strong>Settings → My API tokens</strong> (or open <code>https://&lt;your-customer-id&gt;.&lt;cluster&gt;.observeinc.com/settings/my-api-tokens</code>).<br>
+        2. Create a new API token and copy it — it may not be shown again.<br>
+        3. Ensure the token has <strong>dataset:view</strong> (or equivalent) on the datasets you query.</p>
+      </div>
       <div class="grid">
         <div class="field">
-          <label class="required" for="customerId">OBSERVE_CUSTOMER_ID</label>
+          <label class="required" for="customerId">Customer ID</label>
           <input id="customerId" type="text" placeholder="Your customer ID" autocomplete="off">
         </div>
         <div class="field">
-          <label class="required" for="apiKey">OBSERVE_API_KEY</label>
+          <label class="required" for="apiKey">API Key</label>
           <input id="apiKey" type="password" placeholder="Your API key" autocomplete="off">
         </div>
         <div class="field optional-fields hidden" id="optionalEnv">
@@ -542,6 +568,16 @@
       optional.forEach(el => el.classList.toggle('hidden', !isHidden));
       toggleOptional.textContent = isHidden ? 'Hide optional env vars' : 'Show optional env vars';
     });
+
+    const helpLink = document.getElementById('helpLink');
+    const helpBlock = document.getElementById('helpBlock');
+    if (helpLink && helpBlock) {
+      helpLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        helpBlock.classList.toggle('hidden');
+        helpLink.textContent = helpBlock.classList.contains('hidden') ? 'How do I get API key & Customer ID?' : 'Hide help';
+      });
+    }
 
     function showStatus(msg, type) {
       statusEl.style.display = 'block';

@@ -156,7 +156,31 @@ Open **http://localhost:5000**. Enter **OBSERVE_CUSTOMER_ID** and **OBSERVE_API_
 | Run | Load `.env`, then `python3 extract_errors.py --all-services` (or `--auto`) |
 | Output | Terminal + `Observe/error_report.txt` |
 | **Web UI** | `cd Observe && python3 app.py` → open http://localhost:5000 ([details](#6-optional-run-the-web-ui)) |
+| **Deploy on Render** | Push to GitHub → connect repo at [Render](https://render.com) → deploy ([details](#deploy-on-render)) |
 | **Docker** | `docker build -t observe-extract-errors Observe` then `docker run --rm --env-file .env observe-extract-errors` ([details](#running-with-docker)) |
+
+---
+
+## Deploy on Render
+
+You can host the web UI on [Render](https://render.com) for free (with limits).
+
+1. **Push your code** to a GitHub (or GitLab) repository. Ensure the repo root contains the `Observe` folder and the root `render.yaml`.
+
+2. **Create a Web Service** on Render:
+   - Go to [dashboard.render.com](https://dashboard.render.com) → **New** → **Web Service**.
+   - Connect your repository.
+   - If you use the repo’s **Blueprint** (`render.yaml`), Render will create the service from it. Otherwise set:
+     - **Root Directory:** `Observe`
+     - **Runtime:** Python 3
+     - **Build Command:** `pip install -r requirements.txt`
+     - **Start Command:** `gunicorn --bind 0.0.0.0:$PORT app:app`
+
+3. **Deploy.** Render will build and run the app. Your URL will be like `https://observe-dashboard-check.onrender.com`.
+
+4. **Credentials:** The app does not store Observe credentials on the server. Users enter **OBSERVE_CUSTOMER_ID** and **OBSERVE_API_KEY** in the browser (and can save them in localStorage).
+
+**Note:** On the free tier, requests may time out after ~30–60 seconds. For long “Run dashboard check” runs (e.g. All services × All regions), use a single service or fewer regions, or consider a paid plan for longer timeouts.
 
 ---
 

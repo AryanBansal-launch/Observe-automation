@@ -1,0 +1,8 @@
+# Render Blueprint: deploy the Observe Dashboard Check web app
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: observe-dashboard-check
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT app:app

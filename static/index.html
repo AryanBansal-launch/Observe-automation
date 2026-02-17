@@ -405,6 +405,7 @@
       const sections = [];
       let i = 0;
       let currentRegion = null;
+      let lastSectionTitle = null;  // service name from last "=== Name ===" before a table
       while (i < lines.length) {
         const sectionTitleMatch = lines[i].match(/^=== (.+?) ===\s*$/);
         if (sectionTitleMatch) {
@@ -415,6 +416,7 @@
             i++;
             continue;
           }
+          lastSectionTitle = title.trim();
           i++;
           if (i >= lines.length) break;
         }
@@ -457,7 +459,7 @@
         }
         if (rows.length > 0) {
           sections.push({
-            title: sectionTitleMatch ? sectionTitleMatch[1] : null,
+            title: lastSectionTitle,
             region: currentRegion,
             headers: ['IST Timestamp', 'Count', 'Error & Context', 'Link'].slice(0, widths.length),
             rows

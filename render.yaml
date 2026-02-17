@@ -6,4 +6,4 @@ services:
     runtime: python
     buildCommand: pip install -r requirements.txt
     # Worker timeout must exceed subprocess timeout (300s) so /api/run can finish
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --timeout 330 app:app
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --timeout 500 app:app

@@ -143,6 +143,25 @@
       cursor: pointer;
     }
     .btn-copy:hover, .btn-dl:hover { color: var(--text); border-color: var(--text-muted); }
+    .slack-url-row {
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .slack-url-row label { font-size: 0.75rem; color: var(--text-muted); }
+    .slack-url-row label code { font-size: 0.7rem; }
+    .slack-url-input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.4rem 0.6rem;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      width: 100%;
+    }
     #report {
       margin: 0;
       padding: 1rem;
@@ -347,7 +366,12 @@
         <div class="output-actions">
           <button type="button" class="btn-copy" id="btnCopy">Copy</button>
           <button type="button" class="btn-dl" id="btnDownload">Download</button>
+          <button type="button" class="btn-dl" id="btnSlack">Send me a Slack</button>
         </div>
+      </div>
+      <div class="slack-url-row" id="slackUrlRow">
+        <label for="slackWebhookUrl">Webhook URL (optional — payload will be POSTed here as <code>{"text": "..."}</code>)</label>
+        <input type="url" id="slackWebhookUrl" placeholder="https://your-endpoint.com/webhook" class="slack-url-input" />
       </div>
       <div id="reportWrap">
         <pre id="report" class="empty">Run a check to see the report here.</pre>
@@ -366,6 +390,8 @@
     const btnRun = document.getElementById('btnRun');
     const btnCopy = document.getElementById('btnCopy');
     const btnDownload = document.getElementById('btnDownload');
+    const btnSlack = document.getElementById('btnSlack');
+    const slackWebhookUrl = document.getElementById('slackWebhookUrl');
     const statusEl = document.getElementById('status');
     const serviceSelect = document.getElementById('serviceSelect');
     const serviceRow = document.getElementById('serviceRow');
@@ -779,6 +805,45 @@
         a.download = 'error_report.txt';
         a.click();
         URL.revokeObjectURL(a.href);
+      }
+    });
+
+    btnSlack.addEventListener('click', async () => {
+      if (!lastReportText || !lastReportText.trim()) {
+        showStatus('Run a dashboard check first, then click Send me a Slack.', 'error');
+        return;
+      }
+      const url = (slackWebhookUrl && slackWebhookUrl.value) ? slackWebhookUrl.value.trim() : '';
+      showStatus('Formatting report with Gemini…', 'loading');
+      btnSlack.disabled = true;
+      try {
+        const res = await fetch('/api/slack-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ report_text: lastReportText, webhook_url: url || undefined }),
+        });
+        const data = await res.json().catch(() => ({}));
+        btnSlack.disabled = false;
+        if (data.error && !data.slack_message) {
+          showStatus(data.error, 'error');
+          return;
+        }
+        if (data.slack_message) {
+          if (data.sent_to_url) {
+            showStatus('Slack message sent to your webhook URL.', 'success');
+          } else if (url) {
+            showStatus((data.error || 'Message formatted but could not send to URL. Copy below.') + ' Check payload in Network tab.', data.error ? 'error' : 'success');
+          } else {
+            showStatus('Slack message ready. Copied to clipboard.', 'success');
+            const toCopy = data.payload && data.payload.text ? data.payload.text : data.slack_message;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(toCopy).catch(() => {});
+            }
+          }
+        }
+      } catch (err) {
+        btnSlack.disabled = false;
+        showStatus('Request failed: ' + err.message, 'error');
       }
     });
   </script>

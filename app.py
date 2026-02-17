@@ -13,7 +13,16 @@ import time
 import uuid
 from pathlib import Path
 
+import requests
 from flask import Flask, request, jsonify, send_from_directory
+
+# Load .env so GEMINI_API_KEY, SLACK_WEBHOOK_URL, etc. are available when running locally
+try:
+    from dotenv import load_dotenv
+    _env_path = Path(__file__).resolve().parent / ".env"
+    load_dotenv(_env_path)
+except ImportError:
+    pass  # dotenv optional; use exported env or Render env vars
 
 app = Flask(__name__, static_folder="static")
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -23,6 +32,52 @@ SERVICES_CONFIG = SCRIPT_DIR / "services.sample.json"
 _jobs = {}
 _jobs_lock = threading.Lock()
 JOB_MAX_AGE_SEC = 3600  # drop jobs after 1 hour
+
+# Free Gemini API (set GEMINI_API_KEY in env; get key at https://aistudio.google.com/app/apikey)
+# GEMINI_MODEL: default gemini-1.5-flash; override with gemini-pro, gemini-1.5-pro, or gemini-2.0-flash if needed
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip() or "gemini-1.5-flash"
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+
+# Optional default webhook URL for "Send me a Slack" (overridable by the URL input in the UI)
+SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
+
+SLACK_FORMAT_EXAMPLE = """AWS NA:
+
+nginx-service (244)
+Unexpected DNS Response
+
+management-background-jobs-service:
+Create notification failed. - @aryan.bansal is looking into this
+[DeploymentControllerRMQ] error while deployment.onCreate on DeploymentControllerRMQ
+[LoggingInterceptor] Event deployment.updateStatus Failed for deploymentUid: 6992ee12315fd334d17338b0
+
+AWS EU:
+
+management-bg-service:
+[DeploymentControllerRMQ] error while deployment.onCreate on DeploymentControllerRMQ
+
+Telemetry-service: (29)
+Failed to send kafkaMessage
+
+AZURE NA:
+
+management-bg-jobs-service:
+[Consumer] Crash: KafkaJSNumberOfRetriesExceeded
+[TriggerK8sJobServices] Error while calling kubernetes API for triggerK8sJob. Link
+
+Azure EU:
+
+Telemetry-service:
+otel service health check failed with status code: 503
+
+GCP NA and GCP EU:
+
+mgmt-bg-jobs-service:
+Service unavailable exception
+
+Logs-bg-jobs:
+RMQ unavailable"""
 
 
 def load_services():
@@ -199,6 +254,117 @@ def api_run_status(job_id):
         out["error"] = job.get("error") or "Script failed."
         out["report"] = job.get("report")
     return jsonify(out), 200
+
+
+def _format_report_as_slack_message(report_text):
+    """Use Gemini to format the dashboard report as a Slack-style message. Returns (message, error)."""
+    if not GEMINI_API_KEY:
+        return None, "GEMINI_API_KEY is not set. Add it in env (get a free key at https://aistudio.google.com/app/apikey)."
+    if not report_text or not report_text.strip():
+        return None, "No report content to format."
+    prompt = f"""You are formatting an error dashboard report for a Slack message. Convert the following report into a clean Slack message.
+
+Rules:
+- Group by region first (e.g. AWS NA:, AWS EU:, AZURE NA:, Azure EU:, GCP NA and GCP EU:). Use these exact region headers when the report contains data for those regions.
+- Under each region, list service names. Optionally add error count in parentheses after the name if present, e.g. "nginx-service (244)".
+- Under each service, list the error messages (one per line, indented or with a newline). Keep the original error text; do not invent or add @mentions.
+- Use blank lines between regions and between services for readability.
+- Output only the formatted message, no preamble or explanation.
+
+Example format:
+{SLACK_FORMAT_EXAMPLE}
+
+Report to format:
+---
+{report_text[:30000]}
+---
+"""
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 8192},
+    }
+    url = f"{GEMINI_URL}?key={GEMINI_API_KEY}"
+    headers = {"Content-Type": "application/json"}
+    max_retries = 3
+    retry_delay = 8  # seconds; free tier is often 1 req/min or similar
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=60)
+            if resp.status_code == 429:
+                last_error = "Rate limit exceeded (429). Wait a minute and try again, or check Gemini free tier limits."
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                return None, last_error
+            resp.raise_for_status()
+            data = resp.json()
+            parts = (data.get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+            if not parts:
+                return None, "Gemini returned no text."
+            text = (parts[0].get("text") or "").strip()
+            if not text:
+                return None, "Gemini returned empty text."
+            return text, None
+        except requests.RequestException as e:
+            last_error = getattr(e, "message", None) or str(e)
+            if hasattr(e, "response") and e.response is not None and e.response.status_code == 429:
+                if attempt < max_retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+                    continue
+                return None, "Rate limit exceeded (429). Wait a minute and try again."
+            return None, f"Gemini API request failed: {last_error}"
+        except (KeyError, IndexError, TypeError) as e:
+            return None, f"Unexpected Gemini response: {e}"
+    return None, last_error or "Gemini API request failed."
+
+
+@app.route("/api/slack-message", methods=["POST"])
+def api_slack_message():
+    """Format the last report as a Slack message using Gemini, and optionally POST it to a webhook URL."""
+    try:
+        data = request.get_json(silent=True) or {}
+        report_text = (data.get("report_text") or "").strip()
+        webhook_url = (data.get("webhook_url") or "").strip() or SLACK_WEBHOOK_URL
+
+        slack_message, err = _format_report_as_slack_message(report_text)
+        if err:
+            return jsonify({"success": False, "error": err, "slack_message": None}), 200
+
+        payload = {"text": slack_message}
+        sent_to_url = None
+        if webhook_url:
+            try:
+                r = requests.post(
+                    webhook_url,
+                    json=payload,
+                    headers={"Content-Type": "application/json"},
+                    timeout=15,
+                )
+                if not r.ok:
+                    return jsonify({
+                        "success": False,
+                        "error": f"Webhook returned {r.status_code}: {r.text[:200]}",
+                        "slack_message": slack_message,
+                        "sent_to_url": False,
+                    }), 200
+                sent_to_url = True
+            except requests.RequestException as e:
+                return jsonify({
+                    "success": True,
+                    "slack_message": slack_message,
+                    "sent_to_url": False,
+                    "error": f"Could not send to URL: {getattr(e, 'message', str(e))}",
+                }), 200
+
+        return jsonify({
+            "success": True,
+            "slack_message": slack_message,
+            "sent_to_url": sent_to_url,
+            "payload": payload,
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "slack_message": None}), 500
 
 
 if __name__ == "__main__":

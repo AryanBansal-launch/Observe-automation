@@ -1,11 +1,16 @@
 """
 Simple web app for Observe dashboard check.
 Serves a frontend and runs extract_errors.py with user-provided env vars and options.
+Uses async jobs + polling so long runs (e.g. all services × all regions) work within
+platform request timeouts (e.g. Render's ~30s limit).
 """
 import json
 import os
 import subprocess
 import tempfile
+import threading
+import time
+import uuid
 from pathlib import Path
 
 from flask import Flask, request, jsonify, send_from_directory
@@ -13,6 +18,11 @@ from flask import Flask, request, jsonify, send_from_directory
 app = Flask(__name__, static_folder="static")
 SCRIPT_DIR = Path(__file__).resolve().parent
 SERVICES_CONFIG = SCRIPT_DIR / "services.sample.json"
+
+# In-memory job store (use --workers 1 so one process owns it)
+_jobs = {}
+_jobs_lock = threading.Lock()
+JOB_MAX_AGE_SEC = 3600  # drop jobs after 1 hour
 
 
 def load_services():
@@ -112,6 +122,30 @@ def run_dashboard_check(env_vars, options):
         return False, "", str(e)
 
 
+def _run_job(job_id):
+    """Background: run dashboard check and store result in _jobs."""
+    job = _jobs.get(job_id)
+    if not job or job.get("status") != "running":
+        return
+    env_vars = job.get("env_vars", {})
+    options = job.get("options", {})
+    success, report, error = run_dashboard_check(env_vars, options)
+    with _jobs_lock:
+        if job_id in _jobs:
+            _jobs[job_id]["status"] = "done" if success else "failed"
+            _jobs[job_id]["report"] = report
+            _jobs[job_id]["error"] = error
+
+
+def _cleanup_old_jobs():
+    """Remove jobs older than JOB_MAX_AGE_SEC."""
+    now = time.time()
+    with _jobs_lock:
+        for jid in list(_jobs):
+            if now - _jobs[jid].get("created_at", 0) > JOB_MAX_AGE_SEC:
+                del _jobs[jid]
+
+
 @app.route("/")
 def index():
     return send_from_directory(app.static_folder, "index.html")
@@ -125,13 +159,46 @@ def api_services():
 
 @app.route("/api/run", methods=["POST"])
 def api_run():
-    data = request.get_json() or {}
-    env_vars = data.get("env", {})
-    options = data.get("options", {})
-    success, report, error = run_dashboard_check(env_vars, options)
-    if error:
-        return jsonify({"success": False, "error": error, "report": report or None}), 200
-    return jsonify({"success": True, "report": report}), 200
+    try:
+        data = request.get_json(silent=True) or {}
+        env_vars = data.get("env", {})
+        options = data.get("options", {})
+        # Use async job so we return immediately and avoid platform request timeout (e.g. Render ~30s)
+        job_id = str(uuid.uuid4())
+        with _jobs_lock:
+            _jobs[job_id] = {
+                "status": "running",
+                "report": None,
+                "error": None,
+                "env_vars": env_vars,
+                "options": options,
+                "created_at": time.time(),
+            }
+        thread = threading.Thread(target=_run_job, args=(job_id,))
+        thread.daemon = True
+        thread.start()
+        return jsonify({"job_id": job_id}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "report": None}), 500
+
+
+@app.route("/api/run/status/<job_id>")
+def api_run_status(job_id):
+    _cleanup_old_jobs()
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Job not found or expired"}), 404
+    status = job.get("status", "running")
+    out = {"status": status}
+    if status == "done":
+        out["success"] = True
+        out["report"] = job.get("report") or ""
+    elif status == "failed":
+        out["success"] = False
+        out["error"] = job.get("error") or "Script failed."
+        out["report"] = job.get("report")
+    return jsonify(out), 200
 
 
 if __name__ == "__main__":

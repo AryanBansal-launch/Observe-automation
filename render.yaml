@@ -5,5 +5,5 @@ services:
     name: observe-dashboard-check
     runtime: python
     buildCommand: pip install -r requirements.txt
-    # Worker timeout must exceed subprocess timeout (300s) so /api/run can finish
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --timeout 500 app:app
+    # 1 worker so in-memory async job store is shared; timeout allows long subprocess
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 330 app:app

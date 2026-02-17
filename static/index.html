@@ -642,30 +642,79 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ env, options }),
         });
-        const data = await res.json();
+        let data;
+        try {
+          data = await res.json();
+        } catch (e) {
+          hideStatus();
+          btnRun.disabled = false;
+          showStatus('Request failed: server response was not JSON.', 'error');
+          return;
+        }
+        if (!res.ok) {
+          hideStatus();
+          btnRun.disabled = false;
+          showStatus(data.error || ('Request failed: ' + res.status), 'error');
+          return;
+        }
+
+        // Async job: poll until done or failed (avoids platform request timeout e.g. Render ~30s)
+        if (data.job_id) {
+          const jobId = data.job_id;
+          const poll = async () => {
+            const sres = await fetch('/api/run/status/' + encodeURIComponent(jobId));
+            const sdata = await sres.json().catch(() => ({}));
+            if (sres.status === 404) {
+              hideStatus();
+              btnRun.disabled = false;
+              showStatus(sdata.error || 'Job not found or expired.', 'error');
+              return;
+            }
+            if (sdata.status === 'running') {
+              setTimeout(poll, 2000);
+              return;
+            }
+            hideStatus();
+            btnRun.disabled = false;
+            const reportContent = sdata.report || (sdata.error && sdata.report) || '';
+            lastReportText = reportContent;
+            if (sdata.status === 'failed' || sdata.error) {
+              showStatus(sdata.error || 'Run failed.', 'error');
+              lastReportSections = null;
+              const html = reportContent ? renderReportAsHtml(reportContent) : null;
+              if (html) reportWrap.innerHTML = html;
+              else reportWrap.innerHTML = '<pre id="report">' + (reportContent ? escapeHtml(reportContent) : '') + '</pre>';
+              return;
+            }
+            showStatus('Done.', 'success');
+            const html = renderReportAsHtml(reportContent);
+            if (html) reportWrap.innerHTML = html;
+            else {
+              lastReportSections = null;
+              reportWrap.innerHTML = '<pre id="report">' + (reportContent ? escapeHtml(reportContent) : 'No errors found.') + '</pre>';
+            }
+          };
+          poll();
+          return;
+        }
+
+        // Fallback: synchronous response (report/error in same response)
         hideStatus();
         btnRun.disabled = false;
-
         const reportContent = data.report || (data.error && data.report) || '';
         lastReportText = reportContent;
-
         if (data.error) {
           showStatus(data.error, 'error');
           lastReportSections = null;
           const html = reportContent ? renderReportAsHtml(reportContent) : null;
-          if (html) {
-            reportWrap.innerHTML = html;
-          } else {
-            reportWrap.innerHTML = '<pre id="report">' + (reportContent ? escapeHtml(reportContent) : '') + '</pre>';
-          }
+          if (html) reportWrap.innerHTML = html;
+          else reportWrap.innerHTML = '<pre id="report">' + (reportContent ? escapeHtml(reportContent) : '') + '</pre>';
           return;
         }
-
         showStatus('Done.', 'success');
         const html = renderReportAsHtml(reportContent);
-        if (html) {
-          reportWrap.innerHTML = html;
-        } else {
+        if (html) reportWrap.innerHTML = html;
+        else {
           lastReportSections = null;
           reportWrap.innerHTML = '<pre id="report">' + (reportContent ? escapeHtml(reportContent) : 'No errors found.') + '</pre>';
         }

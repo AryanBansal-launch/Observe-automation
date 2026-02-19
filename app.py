@@ -6,6 +6,7 @@ platform request timeouts (e.g. Render's ~30s limit).
 """
 import json
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -256,6 +257,54 @@ def api_run_status(job_id):
     return jsonify(out), 200
 
 
+def _build_slack_blocks(plain_text):
+    """Convert formatted report text into Slack Block Kit (header, divider, mrkdwn sections)."""
+    def escape(s):
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    lines = (plain_text or "").split("\n")
+    region_pattern = re.compile(
+        r"^(AWS NA|AWS EU|AZURE NA|Azure EU|GCP NA and GCP EU|GCP NA|GCP EU)\s*:?\s*$",
+        re.IGNORECASE,
+    )
+    service_pattern = re.compile(r"^([a-zA-Z0-9][a-zA-Z0-9\-_\.]+(?:\s*\([0-9]+\))?)\s*:?\s*$")
+
+    out_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            out_lines.append("")
+            continue
+        if region_pattern.match(stripped):
+            out_lines.append("*" + escape(stripped.rstrip(":")) + ":*")
+        elif service_pattern.match(stripped) and (" " in stripped or ":" in stripped):
+            out_lines.append("*" + escape(stripped.rstrip(":")) + "*")
+        else:
+            out_lines.append(escape(line))
+    mrkdwn_body = "\n".join(out_lines)
+
+    block_max = 2900
+    blocks = [
+        {"type": "header", "text": {"type": "plain_text", "text": "Dashboard error report", "emoji": True}},
+        {"type": "divider"},
+    ]
+    if len(mrkdwn_body) <= block_max:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": mrkdwn_body}})
+    else:
+        pos = 0
+        while pos < len(mrkdwn_body):
+            end = min(pos + block_max, len(mrkdwn_body))
+            if end < len(mrkdwn_body):
+                last_nl = mrkdwn_body.rfind("\n", pos, end + 1)
+                if last_nl > pos:
+                    end = last_nl + 1
+            chunk = mrkdwn_body[pos:end].strip()
+            if chunk:
+                blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": chunk}})
+            pos = end
+    return {"text": plain_text[:4000], "blocks": blocks}
+
+
 def _format_report_as_slack_message(report_text):
     """Use Gemini to format the dashboard report as a Slack-style message. Returns (message, error)."""
     if not GEMINI_API_KEY:
@@ -331,7 +380,8 @@ def api_slack_message():
         if err:
             return jsonify({"success": False, "error": err, "slack_message": None}), 200
 
-        payload = {"text": slack_message}
+        # Build proper Slack payload: Block Kit (header, divider, mrkdwn sections) + plain text fallback
+        payload = _build_slack_blocks(slack_message)
         sent_to_url = None
         if webhook_url:
             try:

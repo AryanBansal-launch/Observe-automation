@@ -12,7 +12,9 @@ import tempfile
 import threading
 import time
 import uuid
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
+from urllib.parse import quote, urlparse
 
 import requests
 from flask import Flask, request, jsonify, send_from_directory
@@ -79,6 +81,196 @@ Service unavailable exception
 
 Logs-bg-jobs:
 RMQ unavailable"""
+
+
+# --- Hostname lookup: Nginx + Mgmt deployment queries (time range: OBSERVE_LOOKUP_DAYS or 15 mins) ---
+NGINX_HOSTNAME_OPAL = r'''
+filter label(^Namespace) = "contentfly"
+make_col httpurl_detailshost:string(parse_json(string(log))["http.url_details.host"])
+make_col orgUid:string(parse_json(string(log)).orgUid)
+make_col projectUid:string(parse_json(string(log)).projectUid)
+make_col environmentUid:string(parse_json(string(log)).environmentUid)
+make_col cluster:string(label(^Cluster))
+filter cluster = "aws-eu"
+    or cluster = "aws-na"
+    or cluster = "azure-na"
+    or cluster = "azure-eu"
+    or cluster = "gcp-na"
+    or cluster = "gcp-eu"
+    or cluster = "aws-au"
+filter not is_null(httpurl_detailshost) and httpurl_detailshost != ""
+    and not is_null(orgUid) and orgUid != ""
+    and not is_null(projectUid) and projectUid != ""
+    and not is_null(environmentUid) and environmentUid != ""
+statsby orgUid:any(orgUid), projectUid:any(projectUid), environmentUid:any(environmentUid), cluster:any(cluster), group_by(httpurl_detailshost)
+filter not is_null(orgUid) and orgUid != ""
+    and not is_null(projectUid) and projectUid != ""
+    and not is_null(environmentUid) and environmentUid != ""
+    and not is_null(cluster) and cluster != ""
+'''
+
+MGMT_DEPLOYMENT_OPAL = r'''
+filter label(^Namespace) = "contentfly"
+make_col name:string(parse_json(string(log)).event.name)
+filter name = "deployment.onCreate"
+make_col deployment_uid:string(parse_json(string(log)).metadata.deployment_uid)
+make_col success:bool(parse_json(string(log)).event.success)
+make_col environmentUid:string(parse_json(string(log)).data.environment)
+make_col projectUid:string(parse_json(string(log)).data.project)
+make_col deploymentUrl:string(parse_json(string(log)).data.deploymentUrl)
+make_col timestamp_1:string(parse_json(string(log)).timestamp)
+filter success = true
+filter not is_null(projectUid) and projectUid != ""
+    and not is_null(environmentUid) and environmentUid != ""
+    and not is_null(deployment_uid) and deployment_uid != ""
+    and not is_null(deploymentUrl) and deploymentUrl != ""
+    and not is_null(timestamp_1) and timestamp_1 != ""
+statsby deployment_uid:last(deployment_uid), deploymentUrl:last(deploymentUrl), timestamp_1:last(timestamp_1), group_by(projectUid, environmentUid)
+'''
+
+NGINX_WORKSPACE = "41096433"
+NGINX_DATASET = "41250854"
+MGMT_BG_WORKSPACE = "41096433"
+MGMT_BG_DATASET = "41249174"
+
+
+def normalize_hostname(url_or_host):
+    """Strip protocol, path, query, trailing slash; return hostname only (e.g. www.abc.com)."""
+    if not url_or_host or not isinstance(url_or_host, str):
+        return ""
+    s = url_or_host.strip()
+    if not s:
+        return ""
+    if "://" in s:
+        try:
+            parsed = urlparse(s if s.startswith("http") else "https://" + s)
+            s = parsed.netloc or s
+        except Exception:
+            s = re.sub(r"^https?://", "", s, flags=re.IGNORECASE).split("/")[0]
+    else:
+        s = s.split("/")[0].split("?")[0]
+    return s.rstrip("/").lower() or ""
+
+
+def _observe_lookup_time_range():
+    """
+    Return (time_start_utc_iso, time_end_utc_iso) for hostname lookup queries.
+    Set OBSERVE_LOOKUP_DAYS (e.g. 45) to use past N days; if unset, uses past 15 minutes.
+    """
+    now = datetime.now(timezone.utc)
+    lookup_days = os.environ.get("OBSERVE_LOOKUP_DAYS", "").strip()
+    if lookup_days and lookup_days.isdigit() and int(lookup_days) > 0:
+        start = now - timedelta(days=int(lookup_days))
+    else:
+        start = now - timedelta(minutes=15)
+    return start.strftime("%Y-%m-%dT%H:%M:%SZ"), now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def run_observe_opal_query(customer_id, api_key, cluster, dataset_id, workspace_id, pipeline, time_start_utc, time_end_utc):
+    """
+    Run one OPAL query against Observe API. Returns (rows: list[dict], error: str|None).
+    """
+    base = f"https://{customer_id}.{cluster}.observeinc.com" if cluster else f"https://{customer_id}.observeinc.com"
+    url = f"{base}/v1/meta/export/query?time-start={quote(time_start_utc)}&time-end={quote(time_end_utc)}"
+    headers = {
+        "Authorization": f"Bearer {customer_id} {api_key}",
+        "Content-Type": "application/json",
+        "Accept": "application/x-ndjson",
+    }
+    payload = {
+        "query": {
+            "stages": [
+                {
+                    "input": [{"inputName": "main", "datasetId": dataset_id}],
+                    "stageID": "q",
+                    "pipeline": pipeline.strip(),
+                }
+            ]
+        },
+        "rowCount": "10000",
+    }
+    try:
+        r = requests.post(url, headers=headers, json=payload, timeout=120)
+        if not r.ok:
+            return [], f"Observe API error {r.status_code}: {r.text[:500]}"
+        text = (r.text or "").strip()
+        rows = [json.loads(line) for line in text.split("\n") if line.strip()]
+        return rows, None
+    except requests.RequestException as e:
+        return [], f"Request failed: {getattr(e, 'message', str(e))}"
+    except json.JSONDecodeError as e:
+        return [], f"Invalid response: {e}"
+
+
+def hostname_lookup(hostname, env_vars):
+    """
+    Pre-fetch both Nginx and Mgmt deployment data for the configured time range, then filter by hostname and join.
+    Time range: OBSERVE_LOOKUP_DAYS (e.g. 45) = past N days; if unset, past 15 minutes.
+    Returns (results: list[dict], error: str|None). Each result has: orgUid, projectUid, environmentUid,
+    cluster (region), deployment_uid, deployment_timestamp, deploymentUrl.
+    """
+    customer_id = (env_vars or {}).get("OBSERVE_CUSTOMER_ID", "").strip()
+    api_key = (env_vars or {}).get("OBSERVE_API_KEY", "").strip()
+    cluster = (env_vars or {}).get("OBSERVE_CLUSTER", "").strip() or "eu-1"
+    if not customer_id or not api_key:
+        return [], "OBSERVE_CUSTOMER_ID and OBSERVE_API_KEY are required."
+
+    normalized = normalize_hostname(hostname)
+    if not normalized:
+        return [], "Please enter a valid hostname or URL."
+
+    time_start, time_end = _observe_lookup_time_range()
+
+    # 1) Pre-fetch Nginx: hostname -> orgUid, projectUid, environmentUid, cluster
+    nginx_rows, err = run_observe_opal_query(
+        customer_id, api_key, cluster, NGINX_DATASET, NGINX_WORKSPACE,
+        NGINX_HOSTNAME_OPAL, time_start, time_end,
+    )
+    if err:
+        return [], err
+
+    # 2) Pre-fetch Mgmt: projectUid, environmentUid -> deployment_uid, timestamp_1, deploymentUrl
+    mgmt_rows, err = run_observe_opal_query(
+        customer_id, api_key, cluster, MGMT_BG_DATASET, MGMT_BG_WORKSPACE,
+        MGMT_DEPLOYMENT_OPAL, time_start, time_end,
+    )
+    if err:
+        return [], err
+
+    # Build lookup by (projectUid, environmentUid)
+    deployment_by_key = {}
+    for row in mgmt_rows:
+        pu = (row.get("projectUid") or "").strip()
+        eu = (row.get("environmentUid") or "").strip()
+        if pu and eu:
+            deployment_by_key[(pu, eu)] = {
+                "deployment_uid": (row.get("deployment_uid") or "").strip(),
+                "deployment_timestamp": (row.get("timestamp_1") or "").strip(),
+                "deploymentUrl": (row.get("deploymentUrl") or "").strip(),
+            }
+
+    # Filter Nginx by normalized hostname and join deployment info
+    results = []
+    for row in nginx_rows:
+        h = (row.get("httpurl_detailshost") or "").strip().lower()
+        if h != normalized:
+            continue
+        org = (row.get("orgUid") or "").strip()
+        proj = (row.get("projectUid") or "").strip()
+        env = (row.get("environmentUid") or "").strip()
+        reg = (row.get("cluster") or "").strip()
+        dep = deployment_by_key.get((proj, env)) or {}
+        results.append({
+            "orgUid": org,
+            "projectUid": proj,
+            "environmentUid": env,
+            "region": reg,
+            "deployment_uid": dep.get("deployment_uid", ""),
+            "deployment_timestamp": dep.get("deployment_timestamp", ""),
+            "deploymentUrl": dep.get("deploymentUrl", ""),
+        })
+
+    return results, None
 
 
 def load_services():
@@ -211,6 +403,29 @@ def index():
 def api_services():
     """Return list of services from services.sample.json for the dropdown."""
     return jsonify(load_services())
+
+
+@app.route("/api/hostname-lookup", methods=["POST"])
+def api_hostname_lookup():
+    """
+    Look up orgUid, projectUid, environmentUid, region, latest deployment UID and timestamp by hostname.
+    Pre-fetches Nginx + Mgmt deployment data for the configured time range (OBSERVE_LOOKUP_DAYS or 15 mins), then filters by normalized hostname.
+    Body: { "hostname": "www.abc.com or https://www.abc.com/...", "env": { "OBSERVE_CUSTOMER_ID", "OBSERVE_API_KEY", "OBSERVE_CLUSTER" } }
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        hostname = (data.get("hostname") or "").strip()
+        env_vars = data.get("env") or {}
+        results, err = hostname_lookup(hostname, env_vars)
+        if err:
+            return jsonify({"success": False, "error": err, "results": [], "normalized_hostname": normalize_hostname(hostname)}), 200
+        return jsonify({
+            "success": True,
+            "results": results,
+            "normalized_hostname": normalize_hostname(hostname),
+        }), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "results": []}), 500
 
 
 @app.route("/api/run", methods=["POST"])

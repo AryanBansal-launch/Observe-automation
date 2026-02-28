@@ -290,6 +290,21 @@
       border-color: var(--accent);
     }
     .service-row { margin-top: 0.75rem; }
+    .hostname-lookup-section .field.full { grid-column: 1 / -1; }
+    .hostname-lookup-result {
+      margin-top: 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .hostname-lookup-result table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .hostname-lookup-result th, .hostname-lookup-result td { border: 1px solid var(--border); padding: 0.5rem 0.6rem; text-align: left; vertical-align: top; }
+    .hostname-lookup-result th { background: var(--surface); color: var(--text-muted); font-weight: 500; }
+    .hostname-lookup-result th { white-space: nowrap; }
+    .hostname-lookup-result td { word-break: break-word; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+    .hostname-lookup-result .empty-msg { color: var(--text-muted); padding: 1rem; text-align: center; }
+    .hostname-lookup-result .normalized { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; }
   </style>
 </head>
 <body>
@@ -338,6 +353,20 @@
       <div class="optional-toggle" id="toggleOptional">Show optional env vars</div>
     </section>
 
+    <section class="hostname-lookup-section">
+      <h2>Look up by hostname</h2>
+      <p style="color: var(--text-muted); margin-bottom: 0.75rem;">Enter a hostname or full URL (e.g. <code>www.abc.com</code> or <code>https://www.abc.com/path</code>). We use the same env above and pre-fetch Nginx + deployment data (time range set by server env <code>OBSERVE_LOOKUP_DAYS</code>, or past 15 mins), then return orgUid, projectUid, envUid, region, latest deployment UID and timestamp.</p>
+      <div class="grid">
+        <div class="field full">
+          <label for="hostnameInput">Hostname or URL</label>
+          <input id="hostnameInput" type="text" placeholder="www.abc.com or https://www.abc.com/..." autocomplete="off" style="max-width: 480px;">
+        </div>
+      </div>
+      <button type="button" class="btn-run" id="btnHostnameLookup" style="margin-top: 0.5rem;">Look up</button>
+      <div id="hostnameLookupStatus" class="status" style="display: none; margin-top: 0.75rem;"></div>
+      <div id="hostnameLookupResult" class="hostname-lookup-result" style="display: none;"></div>
+    </section>
+
     <section>
       <h2>Run mode</h2>
       <p style="color: var(--text-muted); margin-bottom: 0.75rem;">Same options as CLI flags. Choose one.</p>
@@ -384,6 +413,10 @@
     const apiKey = document.getElementById('apiKey');
     const cluster = document.getElementById('cluster');
     const region = document.getElementById('region');
+    const hostnameInput = document.getElementById('hostnameInput');
+    const btnHostnameLookup = document.getElementById('btnHostnameLookup');
+    const hostnameLookupStatus = document.getElementById('hostnameLookupStatus');
+    const hostnameLookupResult = document.getElementById('hostnameLookupResult');
     const startIst = document.getElementById('startIst');
     const endIst = document.getElementById('endIst');
     const toggleOptional = document.getElementById('toggleOptional');
@@ -595,6 +628,89 @@
       const isHidden = optional[0].classList.contains('hidden');
       optional.forEach(el => el.classList.toggle('hidden', !isHidden));
       toggleOptional.textContent = isHidden ? 'Hide optional env vars' : 'Show optional env vars';
+    });
+
+    btnHostnameLookup.addEventListener('click', async () => {
+      const host = (hostnameInput && hostnameInput.value) ? hostnameInput.value.trim() : '';
+      if (!host) {
+        hostnameLookupStatus.style.display = 'block';
+        hostnameLookupStatus.className = 'status error';
+        hostnameLookupStatus.textContent = 'Enter a hostname or URL.';
+        return;
+      }
+      const cid = customerId.value.trim();
+      const key = apiKey.value.trim();
+      if (!cid || !key) {
+        hostnameLookupStatus.style.display = 'block';
+        hostnameLookupStatus.className = 'status error';
+        hostnameLookupStatus.textContent = 'Set Customer ID and API Key in Environment first.';
+        return;
+      }
+      hostnameLookupResult.style.display = 'none';
+      hostnameLookupStatus.style.display = 'block';
+      hostnameLookupStatus.className = 'status loading';
+      hostnameLookupStatus.textContent = 'Pre-fetching Nginx and deployment data…';
+      btnHostnameLookup.disabled = true;
+      try {
+        const res = await fetch('/api/hostname-lookup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            hostname: host,
+            env: {
+              OBSERVE_CUSTOMER_ID: cid,
+              OBSERVE_API_KEY: key,
+              OBSERVE_CLUSTER: cluster.value.trim() || 'eu-1',
+            },
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        btnHostnameLookup.disabled = false;
+        hostnameLookupStatus.style.display = 'block';
+        if (data.error) {
+          hostnameLookupStatus.className = 'status error';
+          hostnameLookupStatus.textContent = data.error;
+        } else {
+          hostnameLookupStatus.className = 'status success';
+          hostnameLookupStatus.textContent = data.results && data.results.length > 0
+            ? `Found ${data.results.length} match(es) for hostname "${data.normalized_hostname || host}".`
+            : `No matches for hostname "${data.normalized_hostname || host}".`;
+        }
+        const resultEl = hostnameLookupResult;
+        resultEl.style.display = 'block';
+        if (data.normalized_hostname) {
+          resultEl.innerHTML = '<div class="normalized">Searched for: <code>' + escapeHtml(data.normalized_hostname) + '</code></div>';
+        } else {
+          resultEl.innerHTML = '';
+        }
+        if (data.results && data.results.length > 0) {
+          const headers = ['orgUid', 'projectUid', 'environmentUid', 'region', 'deployment_uid', 'deployment_timestamp', 'deploymentUrl'];
+          let table = '<table><thead><tr>' + headers.map(h => '<th>' + escapeHtml(h) + '</th>').join('') + '</tr></thead><tbody>';
+          data.results.forEach(row => {
+            table += '<tr>';
+            headers.forEach(h => {
+              const v = row[h] != null ? String(row[h]) : '';
+              if (h === 'deploymentUrl' && v && (v.startsWith('http://') || v.startsWith('https://'))) {
+                table += '<td><a href="' + escapeHtml(v) + '" target="_blank" rel="noopener">' + escapeHtml(v) + '</a></td>';
+              } else {
+                table += '<td>' + escapeHtml(v) + '</td>';
+              }
+            });
+            table += '</tr>';
+          });
+          table += '</tbody></table>';
+          resultEl.innerHTML += table;
+        } else if (!data.error) {
+          resultEl.innerHTML += '<div class="empty-msg">No rows to display.</div>';
+        }
+      } catch (err) {
+        btnHostnameLookup.disabled = false;
+        hostnameLookupStatus.style.display = 'block';
+        hostnameLookupStatus.className = 'status error';
+        hostnameLookupStatus.textContent = 'Request failed: ' + err.message;
+        hostnameLookupResult.style.display = 'block';
+        hostnameLookupResult.innerHTML = '';
+      }
     });
 
     const helpLink = document.getElementById('helpLink');

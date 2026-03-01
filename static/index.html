@@ -9,16 +9,23 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0f1116;
+      --bg: #0d0f14;
+      --bg-elevated: #111318;
       --surface: #161b22;
+      --surface-hover: #1c2128;
       --border: #30363d;
+      --border-subtle: #21262d;
       --text: #e6edf3;
       --text-muted: #8b949e;
       --accent: #58a6ff;
       --accent-hover: #79b8ff;
+      --accent-soft: rgba(88, 166, 255, 0.12);
       --required: #f85149;
       --success: #3fb950;
       --radius: 8px;
+      --radius-sm: 6px;
+      --section-gap: 1.5rem;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     }
     * { box-sizing: border-box; }
     body {
@@ -28,29 +35,59 @@
       color: var(--text);
       font-family: 'DM Sans', system-ui, sans-serif;
       font-size: 14px;
-      line-height: 1.5;
+      line-height: 1.55;
     }
-    .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
-    h1 {
+    .container { max-width: 920px; margin: 0 auto; padding: 2rem 1.5rem; }
+    @media (min-width: 768px) {
+      .container { padding: 2.5rem 2rem; }
+    }
+    .page-header {
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .page-header h1 {
       font-weight: 600;
-      font-size: 1.5rem;
-      margin-bottom: 0.25rem;
+      font-size: 1.6rem;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.35rem 0;
+      color: var(--text);
     }
-    .subtitle { color: var(--text-muted); margin-bottom: 2rem; }
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin: 0;
+    }
+    .flow-hint {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      margin-top: 1rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .flow-hint span { display: flex; align-items: center; gap: 0.35rem; }
+    .flow-hint span::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: 0.7; }
     section {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 1.25rem 1.5rem;
-      margin-bottom: 1.25rem;
+      padding: 1.35rem 1.5rem;
+      margin-bottom: var(--section-gap);
+      box-shadow: var(--shadow);
     }
+    section:last-of-type { margin-bottom: var(--section-gap); }
     section h2 {
-      font-size: 0.85rem;
+      font-size: 0.9rem;
       font-weight: 600;
-      letter-spacing: 0.04em;
-      color: var(--text-muted);
+      letter-spacing: 0.02em;
+      color: var(--text);
       margin: 0 0 1rem 0;
+      padding-left: 0.75rem;
+      border-left: 3px solid var(--accent);
     }
+    section h2 .help-link { font-weight: 400; }
+    section > p:first-of-type { margin: 0 0 1rem 0; color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; }
     .grid {
       display: grid;
       gap: 1rem;
@@ -115,22 +152,37 @@
     }
     .btn-run:hover { background: var(--accent-hover); }
     .btn-run:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .btn-secondary:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .output-section-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin: 2rem 0 0.75rem 0;
+      letter-spacing: 0.03em;
+    }
     .output-wrap {
-      margin-top: 1.5rem;
+      margin-top: 0;
       border: 1px solid var(--border);
       border-radius: var(--radius);
       overflow: hidden;
-      background: var(--bg);
+      background: var(--bg-elevated);
+      box-shadow: var(--shadow);
     }
     .output-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0.5rem 0.75rem;
+      padding: 0.65rem 1rem;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      font-size: 0.8rem;
-      color: var(--text-muted);
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text);
     }
     .output-actions { display: flex; gap: 0.5rem; }
     .btn-copy, .btn-dl {
@@ -142,13 +194,15 @@
       font-size: 12px;
       cursor: pointer;
     }
-    .btn-copy:hover, .btn-dl:hover { color: var(--text); border-color: var(--text-muted); }
+    .btn-copy, .btn-dl { transition: color 0.15s, border-color 0.15s; }
+    .btn-copy:hover, .btn-dl:hover { color: var(--text); border-color: var(--accent); background: var(--accent-soft); }
     .slack-url-row {
-      padding: 0.5rem 0.75rem;
+      padding: 0.75rem 1rem;
       border-bottom: 1px solid var(--border);
       display: flex;
       flex-direction: column;
-      gap: 0.35rem;
+      gap: 0.4rem;
+      background: var(--surface);
     }
     .slack-url-row label { font-size: 0.75rem; color: var(--text-muted); }
     .slack-url-row label code { font-size: 0.7rem; }
@@ -164,12 +218,13 @@
     }
     #report {
       margin: 0;
-      padding: 1rem;
+      padding: 1.25rem 1rem;
+      min-height: 120px;
       max-height: 70vh;
       overflow: auto;
       font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
-      line-height: 1.45;
+      line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
     }
@@ -309,8 +364,15 @@
 </head>
 <body>
   <div class="container">
-    <h1>Contentstack Launch Observe Dashboard Check</h1>
-    <p class="subtitle">Set your env vars, pick a run mode, and run the full dashboard check.</p>
+    <header class="page-header">
+      <h1>Contentstack Launch Observe Dashboard Check</h1>
+      <p class="subtitle">Set your env vars, pick a run mode, and run the full dashboard check.</p>
+      <div class="flow-hint" aria-hidden="true">
+        <span>Credentials</span>
+        <span>Hostname lookup &amp; Run mode</span>
+        <span>Report &amp; Webhook</span>
+      </div>
+    </header>
 
     <section>
       <h2>Environment <a href="#" class="help-link" id="helpLink">How do I get API key &amp; Customer ID?</a></h2>
@@ -354,22 +416,47 @@
     </section>
 
     <section class="hostname-lookup-section">
-      <h2>Look up by hostname</h2>
-      <p style="color: var(--text-muted); margin-bottom: 0.75rem;">Enter a hostname or full URL (e.g. <code>www.abc.com</code> or <code>https://www.abc.com/path</code>). We use the same env above and pre-fetch Nginx + deployment data (time range set by server env <code>OBSERVE_LOOKUP_DAYS</code>, or past 15 mins), then return orgUid, projectUid, envUid, region, latest deployment UID and timestamp.</p>
+      <h2>Look up by hostname <a href="#" class="help-link" id="helpLinkLookup">How to use it?</a></h2>
+      <div class="help-block hidden" id="helpBlockLookup">
+        <h3>Step 1: Enter credentials</h3>
+        <p>In the <strong>Environment</strong> section above, enter your <strong>Customer ID</strong> and <strong>API Key</strong>. Optionally set <strong>OBSERVE_CLUSTER</strong> (e.g. <code>eu-1</code>) if your Observe instance uses a regional cluster; otherwise the server uses the value from its env.</p>
+        <h3>Step 2: Load data</h3>
+        <p>Click <strong>Load data</strong>. The app fetches Nginx and deployment data from Observe (time range and cluster come from server env). Wait until you see &quot;Data loaded. You can run lookups now.&quot;</p>
+        <h3>Step 3: Look up a hostname</h3>
+        <p>Enter a hostname or full URL (e.g. <code>www.abc.com</code> or <code>https://www.abc.com/path</code>) in the box and click <strong>Look up</strong>. You get <strong>orgUid</strong>, <strong>projectUid</strong>, <strong>environmentUid</strong>, <strong>region</strong>, and the latest <strong>deployment UID</strong> and <strong>timestamp</strong> for that hostname.</p>
+        <h3>Tips</h3>
+        <p>If you skip Load data and click Look up directly, the first lookup will fetch data and may take longer. Subsequent lookups use cached data for a few minutes. You can run Load data again to refresh the cache.</p>
+      </div>
+      <p>Enter Customer ID and API Key above, then click <strong>Load data</strong> to fetch Nginx + deployment data (cluster, time range from server env). After that, enter a hostname and click <strong>Look up</strong> to get orgUid, projectUid, envUid, region, latest deployment UID and timestamp.</p>
       <div class="grid">
         <div class="field full">
           <label for="hostnameInput">Hostname or URL</label>
           <input id="hostnameInput" type="text" placeholder="www.abc.com or https://www.abc.com/..." autocomplete="off" style="max-width: 480px;">
         </div>
       </div>
-      <button type="button" class="btn-run" id="btnHostnameLookup" style="margin-top: 0.5rem;">Look up</button>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; align-items: center;">
+        <button type="button" class="btn-run" id="btnLoadData">Load data</button>
+        <button type="button" class="btn-run btn-secondary" id="btnHostnameLookup">Look up</button>
+      </div>
       <div id="hostnameLookupStatus" class="status" style="display: none; margin-top: 0.75rem;"></div>
       <div id="hostnameLookupResult" class="hostname-lookup-result" style="display: none;"></div>
     </section>
 
     <section>
-      <h2>Run mode</h2>
-      <p style="color: var(--text-muted); margin-bottom: 0.75rem;">Same options as CLI flags. Choose one.</p>
+      <h2>Run mode <a href="#" class="help-link" id="helpLinkRunMode">How to use it?</a></h2>
+      <div class="help-block hidden" id="helpBlockRunMode">
+        <h3>Single service</h3>
+        <p>Run the dashboard check for <strong>one service</strong> only. Select the service from the dropdown below. Uses the region from the optional Environment vars (default <code>aws-na</code>). Best for quick checks on a specific service.</p>
+        <h3>All services</h3>
+        <p>Run the check for <strong>all services</strong> defined in the app config, in the current region. Use this to see errors across every service in one run.</p>
+        <h3>All regions</h3>
+        <p>Run the check for all services across <strong>all regions</strong> (e.g. aws-na, aws-eu, azure-na, azure-eu, gcp-na, gcp-eu, aws-au). Produces a combined report grouped by region. Can take longer.</p>
+        <h3>Auto (all services × all regions)</h3>
+        <p>Same as All regions: runs the dashboard check for <strong>every service in every region</strong>. Use when you want a full sweep. May take several minutes.</p>
+        <h3>Tip</h3>
+        <p>After choosing a mode, click <strong>Run dashboard check</strong> below. The report appears in the Report section; you can then Copy, Download, or Send me a Slack.</p>
+      </div>
+      <p>Same options as CLI flags. Choose one.</p>
       <div class="buttons" role="group" aria-label="Run mode">
         <button type="button" class="btn-mode active" data-mode="single">Single service</button>
         <button type="button" class="btn-mode" data-mode="all_services">All services</button>
@@ -389,7 +476,8 @@
     </div>
 
     <div id="status" class="status" style="display: none;"></div>
-    <div class="output-wrap" style="margin-top: 1rem;">
+    <h2 class="output-section-title">Report &amp; actions</h2>
+    <div class="output-wrap">
       <div class="output-header">
         <span>Report</span>
         <div class="output-actions">
@@ -399,7 +487,17 @@
         </div>
       </div>
       <div class="slack-url-row" id="slackUrlRow">
-        <label for="slackWebhookUrl">Webhook URL (optional — payload will be POSTed here as <code>{"text": "..."}</code>)</label>
+        <label for="slackWebhookUrl">Webhook URL (optional — payload will be POSTed here as <code>{"text": "..."}</code>) <a href="#" class="help-link" id="helpLinkWebhook">How to use it?</a></label>
+        <div class="help-block hidden" id="helpBlockWebhook" style="margin-top: 0.5rem;">
+          <h3>What is this?</h3>
+          <p>After you run a dashboard check, <strong>Send me a Slack</strong> formats the report and can post it to a webhook URL (e.g. Slack incoming webhook, Microsoft Teams, or any HTTP endpoint that accepts JSON).</p>
+          <h3>How to use</h3>
+          <p>1. Run a <strong>dashboard check</strong> first so there is a report.<br>
+          2. (Optional) Enter a <strong>Webhook URL</strong> — e.g. a Slack Incoming Webhook URL, or leave blank to only format and copy the message.<br>
+          3. Click <strong>Send me a Slack</strong>. The app uses Gemini to format the report, then either POSTs it to your webhook or copies the formatted message to the clipboard.</p>
+          <h3>Without a webhook URL</h3>
+          <p>If you leave the Webhook URL empty, the formatted message is copied to your clipboard and shown in the status. You can paste it into Slack or anywhere else manually.</p>
+        </div>
         <input type="url" id="slackWebhookUrl" placeholder="https://your-endpoint.com/webhook" class="slack-url-input" />
       </div>
       <div id="reportWrap">
@@ -414,6 +512,7 @@
     const cluster = document.getElementById('cluster');
     const region = document.getElementById('region');
     const hostnameInput = document.getElementById('hostnameInput');
+    const btnLoadData = document.getElementById('btnLoadData');
     const btnHostnameLookup = document.getElementById('btnHostnameLookup');
     const hostnameLookupStatus = document.getElementById('hostnameLookupStatus');
     const hostnameLookupResult = document.getElementById('hostnameLookupResult');
@@ -630,6 +729,49 @@
       toggleOptional.textContent = isHidden ? 'Hide optional env vars' : 'Show optional env vars';
     });
 
+    btnLoadData.addEventListener('click', async () => {
+      const cid = customerId.value.trim();
+      const key = apiKey.value.trim();
+      if (!cid || !key) {
+        hostnameLookupStatus.style.display = 'block';
+        hostnameLookupStatus.className = 'status error';
+        hostnameLookupStatus.textContent = 'Enter Customer ID and API Key in Environment first.';
+        return;
+      }
+      hostnameLookupStatus.style.display = 'block';
+      hostnameLookupStatus.className = 'status loading';
+      hostnameLookupStatus.textContent = 'Loading Nginx + deployment data… (cluster, time range from server env)';
+      btnLoadData.disabled = true;
+      try {
+        const res = await fetch('/api/hostname-lookup/prefetch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            env: {
+              OBSERVE_CUSTOMER_ID: cid,
+              OBSERVE_API_KEY: key,
+              OBSERVE_CLUSTER: (cluster && cluster.value) ? cluster.value.trim() : '',
+            },
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        btnLoadData.disabled = false;
+        hostnameLookupStatus.style.display = 'block';
+        if (data.error) {
+          hostnameLookupStatus.className = 'status error';
+          hostnameLookupStatus.textContent = data.error;
+        } else {
+          hostnameLookupStatus.className = 'status success';
+          hostnameLookupStatus.textContent = data.message || 'Data loaded. You can run lookups now.';
+        }
+      } catch (err) {
+        btnLoadData.disabled = false;
+        hostnameLookupStatus.style.display = 'block';
+        hostnameLookupStatus.className = 'status error';
+        hostnameLookupStatus.textContent = 'Request failed: ' + err.message;
+      }
+    });
+
     btnHostnameLookup.addEventListener('click', async () => {
       const host = (hostnameInput && hostnameInput.value) ? hostnameInput.value.trim() : '';
       if (!host) {
@@ -660,7 +802,7 @@
             env: {
               OBSERVE_CUSTOMER_ID: cid,
               OBSERVE_API_KEY: key,
-              OBSERVE_CLUSTER: cluster.value.trim() || 'eu-1',
+              OBSERVE_CLUSTER: (cluster && cluster.value) ? cluster.value.trim() : '',
             },
           }),
         });
@@ -720,6 +862,33 @@
         e.preventDefault();
         helpBlock.classList.toggle('hidden');
         helpLink.textContent = helpBlock.classList.contains('hidden') ? 'How do I get API key & Customer ID?' : 'Hide help';
+      });
+    }
+    const helpLinkLookup = document.getElementById('helpLinkLookup');
+    const helpBlockLookup = document.getElementById('helpBlockLookup');
+    if (helpLinkLookup && helpBlockLookup) {
+      helpLinkLookup.addEventListener('click', (e) => {
+        e.preventDefault();
+        helpBlockLookup.classList.toggle('hidden');
+        helpLinkLookup.textContent = helpBlockLookup.classList.contains('hidden') ? 'How to use it?' : 'Hide help';
+      });
+    }
+    const helpLinkWebhook = document.getElementById('helpLinkWebhook');
+    const helpBlockWebhook = document.getElementById('helpBlockWebhook');
+    if (helpLinkWebhook && helpBlockWebhook) {
+      helpLinkWebhook.addEventListener('click', (e) => {
+        e.preventDefault();
+        helpBlockWebhook.classList.toggle('hidden');
+        helpLinkWebhook.textContent = helpBlockWebhook.classList.contains('hidden') ? 'How to use it?' : 'Hide help';
+      });
+    }
+    const helpLinkRunMode = document.getElementById('helpLinkRunMode');
+    const helpBlockRunMode = document.getElementById('helpBlockRunMode');
+    if (helpLinkRunMode && helpBlockRunMode) {
+      helpLinkRunMode.addEventListener('click', (e) => {
+        e.preventDefault();
+        helpBlockRunMode.classList.toggle('hidden');
+        helpLinkRunMode.textContent = helpBlockRunMode.classList.contains('hidden') ? 'How to use it?' : 'Hide help';
       });
     }
 

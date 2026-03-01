@@ -5,6 +5,7 @@ Uses async jobs + polling so long runs (e.g. all services × all regions) work w
 platform request timeouts (e.g. Render's ~30s limit).
 """
 import json
+import logging
 import os
 import re
 import subprocess
@@ -15,6 +16,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from urllib.parse import quote, urlparse
+
+logger = logging.getLogger(__name__)
 
 import requests
 from flask import Flask, request, jsonify, send_from_directory
@@ -35,6 +38,13 @@ SERVICES_CONFIG = SCRIPT_DIR / "services.sample.json"
 _jobs = {}
 _jobs_lock = threading.Lock()
 JOB_MAX_AGE_SEC = 3600  # drop jobs after 1 hour
+
+# Hostname lookup cache: prefetched Nginx + Mgmt data (keyed by customer_id, cluster)
+_lookup_cache = {}
+_lookup_cache_lock = threading.Lock()
+LOOKUP_CACHE_TTL_SEC = 600  # 10 min; use cache if younger than this
+# HTTP timeout for Observe API calls (env OBSERVE_LOOKUP_TIMEOUT_SEC, default 300)
+DEFAULT_LOOKUP_TIMEOUT_SEC = 300
 
 # Free Gemini API (set GEMINI_API_KEY in env; get key at https://aistudio.google.com/app/apikey)
 # GEMINI_MODEL: default gemini-1.5-flash; override with gemini-pro, gemini-1.5-pro, or gemini-2.0-flash if needed
@@ -152,26 +162,107 @@ def normalize_hostname(url_or_host):
     return s.rstrip("/").lower() or ""
 
 
-def _observe_lookup_time_range():
+def _observe_lookup_time_params():
     """
-    Return (time_start_utc_iso, time_end_utc_iso) for hostname lookup queries.
-    Set OBSERVE_LOOKUP_DAYS (e.g. 45) to use past N days; if unset, uses past 15 minutes.
+    Return query params for Observe export/query. API wants either (startTime + endTime) OR (interval) only.
+    Set OBSERVE_LOOKUP_DAYS (e.g. 45) for past N days; if unset, use interval=15m.
+    Returns dict suitable for requests: either {"startTime": ..., "endTime": ...} or {"interval": "15m"}.
     """
-    now = datetime.now(timezone.utc)
     lookup_days = os.environ.get("OBSERVE_LOOKUP_DAYS", "").strip()
     if lookup_days and lookup_days.isdigit() and int(lookup_days) > 0:
+        now = datetime.now(timezone.utc)
         start = now - timedelta(days=int(lookup_days))
-    else:
-        start = now - timedelta(minutes=15)
-    return start.strftime("%Y-%m-%dT%H:%M:%SZ"), now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        return {"startTime": start.strftime("%Y-%m-%dT%H:%M:%SZ"), "endTime": now.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    return {"interval": "15m"}
 
 
-def run_observe_opal_query(customer_id, api_key, cluster, dataset_id, workspace_id, pipeline, time_start_utc, time_end_utc):
+def _fetch_lookup_data(customer_id, api_key, cluster):
+    """
+    Run both Nginx and Mgmt OPAL queries for the configured time range.
+    Returns (nginx_rows, mgmt_rows, error_str). error_str is None on success.
+    """
+    logger.info("Lookup: fetching Nginx + Mgmt data from Observe (this may take a moment)...")
+    time_params = _observe_lookup_time_params()
+    nginx_rows, err = run_observe_opal_query(
+        customer_id, api_key, cluster, NGINX_DATASET, NGINX_WORKSPACE,
+        NGINX_HOSTNAME_OPAL, time_params,
+    )
+    if err:
+        logger.warning("Lookup: Nginx query failed: %s", err)
+        return [], [], err
+    logger.info("Lookup: Nginx query returned %d rows", len(nginx_rows))
+    mgmt_rows, err = run_observe_opal_query(
+        customer_id, api_key, cluster, MGMT_BG_DATASET, MGMT_BG_WORKSPACE,
+        MGMT_DEPLOYMENT_OPAL, time_params,
+    )
+    if err:
+        logger.warning("Lookup: Mgmt deployment query failed: %s", err)
+        return [], [], err
+    logger.info("Lookup: Mgmt query returned %d rows; fetch complete", len(mgmt_rows))
+    return nginx_rows, mgmt_rows, None
+
+
+def _env_with_server_defaults(env_vars):
+    """Merge request env with server env: Customer ID and API Key from request; cluster etc. from server if not in request."""
+    env = dict(env_vars or {})
+    if not _sanitize_observe_creds(env.get("OBSERVE_CLUSTER", "")):
+        env["OBSERVE_CLUSTER"] = os.environ.get("OBSERVE_CLUSTER", "").strip()
+    return env
+
+
+def _sanitize_observe_creds(value):
+    """Strip env value and remove newlines/quotes that can break Observe API auth."""
+    if not value:
+        return ""
+    s = str(value).strip().replace("\r", "").replace("\n", "").strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in ('"', "'"):
+        s = s[1:-1].strip()
+    return s
+
+
+def _prefetch_lookup_cache():
+    """If OBSERVE_CUSTOMER_ID and OBSERVE_API_KEY are set in env, prefetch Nginx + Mgmt data into cache (background)."""
+
+    def _run():
+        try:
+            from dotenv import load_dotenv
+            load_dotenv(SCRIPT_DIR / ".env")
+        except Exception:
+            pass
+        customer_id = _sanitize_observe_creds(os.environ.get("OBSERVE_CUSTOMER_ID", ""))
+        api_key = _sanitize_observe_creds(os.environ.get("OBSERVE_API_KEY", ""))
+        cluster = _sanitize_observe_creds(os.environ.get("OBSERVE_CLUSTER", ""))
+        if not customer_id or not api_key:
+            logger.debug("Lookup: prefetch skipped (no OBSERVE_CUSTOMER_ID or OBSERVE_API_KEY in env)")
+            return
+        base_url = f"https://{customer_id}.{cluster}.observeinc.com" if cluster else f"https://{customer_id}.observeinc.com"
+        logger.info("Lookup: prefetching data on startup (customer_id=%s, cluster=%r, url=%s)...", customer_id, cluster or "(US default)", base_url)
+        nginx_rows, mgmt_rows, err = _fetch_lookup_data(customer_id, api_key, cluster)
+        with _lookup_cache_lock:
+            if err:
+                _lookup_cache[(customer_id, cluster)] = {"nginx_rows": [], "mgmt_rows": [], "error": err, "fetched_at": time.time()}
+                logger.warning("Lookup: prefetch failed: %s", err)
+            else:
+                _lookup_cache[(customer_id, cluster)] = {"nginx_rows": nginx_rows, "mgmt_rows": mgmt_rows, "error": None, "fetched_at": time.time()}
+                logger.info("Lookup: prefetch done (nginx=%d, mgmt=%d rows)", len(nginx_rows), len(mgmt_rows))
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+
+
+def run_observe_opal_query(customer_id, api_key, cluster, dataset_id, workspace_id, pipeline, time_params):
     """
     Run one OPAL query against Observe API. Returns (rows: list[dict], error: str|None).
+    time_params: either {"startTime": iso, "endTime": iso} or {"interval": "15m"} (API accepts only one style).
     """
+    customer_id = _sanitize_observe_creds(customer_id)
+    api_key = _sanitize_observe_creds(api_key)
+    cluster = _sanitize_observe_creds(cluster) if cluster else ""
+    if ":" in api_key:
+        logger.warning("Lookup: OBSERVE_API_KEY looks like a Datastream token (contains ':'). Export/query needs an API token from Observe Settings → My API tokens.")
     base = f"https://{customer_id}.{cluster}.observeinc.com" if cluster else f"https://{customer_id}.observeinc.com"
-    url = f"{base}/v1/meta/export/query?time-start={quote(time_start_utc)}&time-end={quote(time_end_utc)}"
+    url = f"{base}/v1/meta/export/query"
+    params = dict(time_params)
     headers = {
         "Authorization": f"Bearer {customer_id} {api_key}",
         "Content-Type": "application/json",
@@ -189,12 +280,22 @@ def run_observe_opal_query(customer_id, api_key, cluster, dataset_id, workspace_
         },
         "rowCount": "10000",
     }
+    timeout_sec = DEFAULT_LOOKUP_TIMEOUT_SEC
+    raw = os.environ.get("OBSERVE_LOOKUP_TIMEOUT_SEC", "").strip()
+    if raw and raw.isdigit() and int(raw) > 0:
+        timeout_sec = int(raw)
     try:
-        r = requests.post(url, headers=headers, json=payload, timeout=120)
+        logger.info("Lookup: running Observe query (dataset %s, timeout=%ss)...", dataset_id, timeout_sec)
+        r = requests.post(url, params=params, headers=headers, json=payload, timeout=timeout_sec)
         if not r.ok:
-            return [], f"Observe API error {r.status_code}: {r.text[:500]}"
+            logger.warning("Lookup: Observe API error %s: %s", r.status_code, r.text[:200])
+            err_msg = r.text[:500] if r.text else ""
+            if r.status_code == 401:
+                err_msg += " (Check: API token valid? Correct cluster? US tenant uses no OBSERVE_CLUSTER; EU uses OBSERVE_CLUSTER=eu-1)"
+            return [], f"Observe API error {r.status_code}: {err_msg}"
         text = (r.text or "").strip()
         rows = [json.loads(line) for line in text.split("\n") if line.strip()]
+        logger.info("Lookup: query returned %d rows", len(rows))
         return rows, None
     except requests.RequestException as e:
         return [], f"Request failed: {getattr(e, 'message', str(e))}"
@@ -204,14 +305,16 @@ def run_observe_opal_query(customer_id, api_key, cluster, dataset_id, workspace_
 
 def hostname_lookup(hostname, env_vars):
     """
-    Pre-fetch both Nginx and Mgmt deployment data for the configured time range, then filter by hostname and join.
+    Use cached (or freshly fetched) Nginx + Mgmt deployment data, filter by hostname and join.
+    Creds (Customer ID, API Key) from request; cluster etc. from server env if not in request.
     Time range: OBSERVE_LOOKUP_DAYS (e.g. 45) = past N days; if unset, past 15 minutes.
     Returns (results: list[dict], error: str|None). Each result has: orgUid, projectUid, environmentUid,
     cluster (region), deployment_uid, deployment_timestamp, deploymentUrl.
     """
-    customer_id = (env_vars or {}).get("OBSERVE_CUSTOMER_ID", "").strip()
-    api_key = (env_vars or {}).get("OBSERVE_API_KEY", "").strip()
-    cluster = (env_vars or {}).get("OBSERVE_CLUSTER", "").strip() or "eu-1"
+    env_vars = _env_with_server_defaults(env_vars)
+    customer_id = _sanitize_observe_creds((env_vars or {}).get("OBSERVE_CUSTOMER_ID", ""))
+    api_key = _sanitize_observe_creds((env_vars or {}).get("OBSERVE_API_KEY", ""))
+    cluster = _sanitize_observe_creds((env_vars or {}).get("OBSERVE_CLUSTER", ""))
     if not customer_id or not api_key:
         return [], "OBSERVE_CUSTOMER_ID and OBSERVE_API_KEY are required."
 
@@ -219,23 +322,29 @@ def hostname_lookup(hostname, env_vars):
     if not normalized:
         return [], "Please enter a valid hostname or URL."
 
-    time_start, time_end = _observe_lookup_time_range()
+    logger.info("Lookup: hostname search started for %r (normalized: %s)", hostname.strip(), normalized)
 
-    # 1) Pre-fetch Nginx: hostname -> orgUid, projectUid, environmentUid, cluster
-    nginx_rows, err = run_observe_opal_query(
-        customer_id, api_key, cluster, NGINX_DATASET, NGINX_WORKSPACE,
-        NGINX_HOSTNAME_OPAL, time_start, time_end,
-    )
-    if err:
-        return [], err
+    cache_key = (customer_id, cluster)
+    now_ts = time.time()
 
-    # 2) Pre-fetch Mgmt: projectUid, environmentUid -> deployment_uid, timestamp_1, deploymentUrl
-    mgmt_rows, err = run_observe_opal_query(
-        customer_id, api_key, cluster, MGMT_BG_DATASET, MGMT_BG_WORKSPACE,
-        MGMT_DEPLOYMENT_OPAL, time_start, time_end,
-    )
-    if err:
-        return [], err
+    # Use cache if valid (same key and not expired)
+    with _lookup_cache_lock:
+        entry = _lookup_cache.get(cache_key)
+        if entry and (now_ts - entry.get("fetched_at", 0)) <= LOOKUP_CACHE_TTL_SEC and entry.get("error") is None:
+            nginx_rows = entry.get("nginx_rows") or []
+            mgmt_rows = entry.get("mgmt_rows") or []
+        else:
+            nginx_rows = mgmt_rows = None
+
+    if nginx_rows is None or mgmt_rows is None:
+        logger.info("Lookup: cache miss or expired; fetching fresh data from Observe...")
+        nginx_rows, mgmt_rows, err = _fetch_lookup_data(customer_id, api_key, cluster)
+        if err:
+            return [], err
+        with _lookup_cache_lock:
+            _lookup_cache[cache_key] = {"nginx_rows": nginx_rows, "mgmt_rows": mgmt_rows, "error": None, "fetched_at": time.time()}
+    else:
+        logger.info("Lookup: using cached data (%d nginx, %d mgmt rows)", len(nginx_rows), len(mgmt_rows))
 
     # Build lookup by (projectUid, environmentUid)
     deployment_by_key = {}
@@ -270,6 +379,7 @@ def hostname_lookup(hostname, env_vars):
             "deploymentUrl": dep.get("deploymentUrl", ""),
         })
 
+    logger.info("Lookup: done for %s — %d result(s)", normalized, len(results))
     return results, None
 
 
@@ -405,19 +515,40 @@ def api_services():
     return jsonify(load_services())
 
 
+@app.route("/api/hostname-lookup/prefetch", methods=["POST"])
+def api_hostname_lookup_prefetch():
+    """
+    Prefetch Nginx + Mgmt data using Customer ID and API Key from the request. Cluster etc. from server env.
+    Call this after the user has entered creds in the UI so lookups can use cached data.
+    Body: { "env": { "OBSERVE_CUSTOMER_ID", "OBSERVE_API_KEY" } }
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        env_vars = data.get("env") or {}
+        logger.info("Lookup: prefetch requested (customer_id from UI)")
+        success, err = _run_prefetch_with_creds(env_vars)
+        if not success:
+            return jsonify({"success": False, "error": err or "Prefetch failed"}), 200
+        return jsonify({"success": True, "message": "Data loaded; you can run lookups now."}), 200
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @app.route("/api/hostname-lookup", methods=["POST"])
 def api_hostname_lookup():
     """
     Look up orgUid, projectUid, environmentUid, region, latest deployment UID and timestamp by hostname.
-    Pre-fetches Nginx + Mgmt deployment data for the configured time range (OBSERVE_LOOKUP_DAYS or 15 mins), then filters by normalized hostname.
-    Body: { "hostname": "www.abc.com or https://www.abc.com/...", "env": { "OBSERVE_CUSTOMER_ID", "OBSERVE_API_KEY", "OBSERVE_CLUSTER" } }
+    Uses Customer ID and API Key from request; cluster etc. from server env. Pre-fetches on cache miss.
+    Body: { "hostname": "www.abc.com or https://www.abc.com/...", "env": { "OBSERVE_CUSTOMER_ID", "OBSERVE_API_KEY" } }
     """
     try:
         data = request.get_json(silent=True) or {}
         hostname = (data.get("hostname") or "").strip()
         env_vars = data.get("env") or {}
+        logger.info("Lookup: API request for hostname %r", hostname or "(empty)")
         results, err = hostname_lookup(hostname, env_vars)
         if err:
+            logger.warning("Lookup: failed for %r — %s", hostname, err)
             return jsonify({"success": False, "error": err, "results": [], "normalized_hostname": normalize_hostname(hostname)}), 200
         return jsonify({
             "success": True,
@@ -632,6 +763,26 @@ def api_slack_message():
         return jsonify({"success": False, "error": str(e), "slack_message": None}), 500
 
 
+# No startup prefetch; prefetch runs only when user triggers it via UI (Load data button) or on first Look up.
+
+
+def _run_prefetch_with_creds(env_vars):
+    """Run Nginx + Mgmt fetch with given creds (env_vars merged with server env), store in cache. Returns (success, error_msg)."""
+    env_vars = _env_with_server_defaults(env_vars)
+    customer_id = _sanitize_observe_creds((env_vars or {}).get("OBSERVE_CUSTOMER_ID", ""))
+    api_key = _sanitize_observe_creds((env_vars or {}).get("OBSERVE_API_KEY", ""))
+    cluster = _sanitize_observe_creds((env_vars or {}).get("OBSERVE_CLUSTER", ""))
+    if not customer_id or not api_key:
+        return False, "OBSERVE_CUSTOMER_ID and OBSERVE_API_KEY are required."
+    nginx_rows, mgmt_rows, err = _fetch_lookup_data(customer_id, api_key, cluster)
+    if err:
+        return False, err
+    with _lookup_cache_lock:
+        _lookup_cache[(customer_id, cluster)] = {"nginx_rows": nginx_rows, "mgmt_rows": mgmt_rows, "error": None, "fetched_at": time.time()}
+    return True, None
+
+
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     port = int(os.environ.get("PORT", 5001))
     app.run(host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG") == "1")

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Observe Dashboard Check</title>
+  <title>Contentstack Launch Observe</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -360,22 +360,63 @@
     .hostname-lookup-result td { word-break: break-word; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
     .hostname-lookup-result .empty-msg { color: var(--text-muted); padding: 1rem; text-align: center; }
     .hostname-lookup-result .normalized { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      border-radius: var(--radius) var(--radius) 0 0;
+      padding: 0 1rem 0 0;
+      overflow-x: auto;
+    }
+    .tab {
+      padding: 1rem 1.5rem;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .tab-panel { display: none; padding: 1.5rem 1.5rem 2rem; }
+    .tab-panel.active { display: block; }
+    .tab-panel h2 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--text);
+      margin: 0 0 1rem 0;
+      padding-left: 0.75rem;
+      border-left: 3px solid var(--accent);
+    }
+    .tabbed-section {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      margin-bottom: var(--section-gap);
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <header class="page-header">
-      <h1>Contentstack Launch Observe Dashboard Check</h1>
-      <p class="subtitle">Set your env vars, pick a run mode, and run the full dashboard check.</p>
-      <div class="flow-hint" aria-hidden="true">
-        <span>Credentials</span>
-        <span>Hostname lookup &amp; Run mode</span>
-        <span>Report &amp; Webhook</span>
-      </div>
+      <h1>Contentstack Launch Observe</h1>
+      <p class="subtitle">Dashboard check and hostname lookup for Observe.</p>
     </header>
 
     <section>
-      <h2>Environment <a href="#" class="help-link" id="helpLink">How do I get API key &amp; Customer ID?</a></h2>
+      <h2>Credentials <a href="#" class="help-link" id="helpLink">How do I get API key &amp; Customer ID?</a></h2>
       <div class="help-block hidden" id="helpBlock">
         <h3>Customer ID (OBSERVE_CUSTOMER_ID)</h3>
         <p>1. Open your Observe workspace in the browser (e.g. your Observe URL).<br>
@@ -415,69 +456,45 @@
       <div class="optional-toggle" id="toggleOptional">Show optional env vars</div>
     </section>
 
-    <section class="hostname-lookup-section">
-      <h2>Look up by hostname <a href="#" class="help-link" id="helpLinkLookup">How to use it?</a></h2>
-      <div class="help-block hidden" id="helpBlockLookup">
-        <h3>Step 1: Enter credentials</h3>
-        <p>In the <strong>Environment</strong> section above, enter your <strong>Customer ID</strong> and <strong>API Key</strong>. Optionally set <strong>OBSERVE_CLUSTER</strong> (e.g. <code>eu-1</code>) if your Observe instance uses a regional cluster; otherwise the server uses the value from its env.</p>
-        <h3>Step 2: Load data</h3>
-        <p>Click <strong>Load data</strong>. The app fetches Nginx and deployment data from Observe (time range and cluster come from server env). Wait until you see &quot;Data loaded. You can run lookups now.&quot;</p>
-        <h3>Step 3: Look up a hostname</h3>
-        <p>Enter a hostname or full URL (e.g. <code>www.abc.com</code> or <code>https://www.abc.com/path</code>) in the box and click <strong>Look up</strong>. You get <strong>orgUid</strong>, <strong>projectUid</strong>, <strong>environmentUid</strong>, <strong>region</strong>, and the latest <strong>deployment UID</strong> and <strong>timestamp</strong> for that hostname.</p>
-        <h3>Tips</h3>
-        <p>If you skip Load data and click Look up directly, the first lookup will fetch data and may take longer. Subsequent lookups use cached data for a few minutes. You can run Load data again to refresh the cache.</p>
+    <div class="tabbed-section">
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab active" role="tab" id="tabDashboard" aria-selected="true" data-tab="dashboard">Dashboard Check</button>
+        <button type="button" class="tab" role="tab" id="tabLookup" aria-selected="false" data-tab="lookup">Lookup by Hostname</button>
       </div>
-      <p>Enter Customer ID and API Key above, then click <strong>Load data</strong> to fetch Nginx + deployment data (cluster, time range from server env). After that, enter a hostname and click <strong>Look up</strong> to get orgUid, projectUid, envUid, region, latest deployment UID and timestamp.</p>
-      <div class="grid">
-        <div class="field full">
-          <label for="hostnameInput">Hostname or URL</label>
-          <input id="hostnameInput" type="text" placeholder="www.abc.com or https://www.abc.com/..." autocomplete="off" style="max-width: 480px;">
+
+      <div id="panelDashboard" class="tab-panel active" role="tabpanel">
+        <h2>Dashboard Check <a href="#" class="help-link" id="helpLinkRunMode">How to use it?</a></h2>
+        <div class="help-block hidden" id="helpBlockRunMode">
+          <h3>Single service</h3>
+          <p>Run the dashboard check for <strong>one service</strong> only. Select the service from the dropdown below. Uses the region from the optional Environment vars (default <code>aws-na</code>). Best for quick checks on a specific service.</p>
+          <h3>All services</h3>
+          <p>Run the check for <strong>all services</strong> defined in the app config, in the current region. Use this to see errors across every service in one run.</p>
+          <h3>All regions</h3>
+          <p>Run the check for all services across <strong>all regions</strong> (e.g. aws-na, aws-eu, azure-na, azure-eu, gcp-na, gcp-eu, aws-au). Produces a combined report grouped by region. Can take longer.</p>
+          <h3>Auto (all services × all regions)</h3>
+          <p>Same as All regions: runs the dashboard check for <strong>every service in every region</strong>. Use when you want a full sweep. May take several minutes.</p>
+          <h3>Tip</h3>
+          <p>After choosing a mode, click <strong>Run dashboard check</strong>. The report appears below; you can then Copy, Download, or Send me a Slack.</p>
         </div>
-      </div>
-      <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; align-items: center;">
-        <button type="button" class="btn-run" id="btnLoadData">Load data</button>
-        <button type="button" class="btn-run btn-secondary" id="btnHostnameLookup">Look up</button>
-      </div>
-      <div id="hostnameLookupStatus" class="status" style="display: none; margin-top: 0.75rem;"></div>
-      <div id="hostnameLookupResult" class="hostname-lookup-result" style="display: none;"></div>
-    </section>
-
-    <section>
-      <h2>Run mode <a href="#" class="help-link" id="helpLinkRunMode">How to use it?</a></h2>
-      <div class="help-block hidden" id="helpBlockRunMode">
-        <h3>Single service</h3>
-        <p>Run the dashboard check for <strong>one service</strong> only. Select the service from the dropdown below. Uses the region from the optional Environment vars (default <code>aws-na</code>). Best for quick checks on a specific service.</p>
-        <h3>All services</h3>
-        <p>Run the check for <strong>all services</strong> defined in the app config, in the current region. Use this to see errors across every service in one run.</p>
-        <h3>All regions</h3>
-        <p>Run the check for all services across <strong>all regions</strong> (e.g. aws-na, aws-eu, azure-na, azure-eu, gcp-na, gcp-eu, aws-au). Produces a combined report grouped by region. Can take longer.</p>
-        <h3>Auto (all services × all regions)</h3>
-        <p>Same as All regions: runs the dashboard check for <strong>every service in every region</strong>. Use when you want a full sweep. May take several minutes.</p>
-        <h3>Tip</h3>
-        <p>After choosing a mode, click <strong>Run dashboard check</strong> below. The report appears in the Report section; you can then Copy, Download, or Send me a Slack.</p>
-      </div>
-      <p>Same options as CLI flags. Choose one.</p>
-      <div class="buttons" role="group" aria-label="Run mode">
-        <button type="button" class="btn-mode active" data-mode="single">Single service</button>
-        <button type="button" class="btn-mode" data-mode="all_services">All services</button>
-        <button type="button" class="btn-mode" data-mode="all_regions">All regions</button>
-        <button type="button" class="btn-mode" data-mode="auto">Auto (all services × all regions)</button>
-      </div>
-      <div class="field service-row" id="serviceRow">
-        <label for="serviceSelect">Service</label>
-        <select id="serviceSelect">
-          <option value="">Loading…</option>
-        </select>
-      </div>
-    </section>
-
-    <div>
-      <button type="button" class="btn-run" id="btnRun">Run dashboard check</button>
-    </div>
-
-    <div id="status" class="status" style="display: none;"></div>
-    <h2 class="output-section-title">Report &amp; actions</h2>
-    <div class="output-wrap">
+        <p>Choose a run mode and click Run to fetch error reports from Observe.</p>
+        <div class="buttons" role="group" aria-label="Run mode">
+          <button type="button" class="btn-mode active" data-mode="single">Single service</button>
+          <button type="button" class="btn-mode" data-mode="all_services">All services</button>
+          <button type="button" class="btn-mode" data-mode="all_regions">All regions</button>
+          <button type="button" class="btn-mode" data-mode="auto">Auto (all services × all regions)</button>
+        </div>
+        <div class="field service-row" id="serviceRow">
+          <label for="serviceSelect">Service</label>
+          <select id="serviceSelect">
+            <option value="">Loading…</option>
+          </select>
+        </div>
+        <div style="margin-top: 1.25rem;">
+          <button type="button" class="btn-run" id="btnRun">Run dashboard check</button>
+        </div>
+        <div id="status" class="status" style="display: none; margin-top: 1rem;"></div>
+        <h2 class="output-section-title" style="margin-top: 2rem;">Report</h2>
+        <div class="output-wrap">
       <div class="output-header">
         <span>Report</span>
         <div class="output-actions">
@@ -500,6 +517,35 @@
       </div>
       <div id="reportWrap">
         <pre id="report" class="empty">Run a check to see the report here.</pre>
+      </div>
+        </div>
+      </div>
+
+      <div id="panelLookup" class="tab-panel" role="tabpanel">
+        <h2>Lookup by Hostname <a href="#" class="help-link" id="helpLinkLookup">How to use it?</a></h2>
+        <div class="help-block hidden" id="helpBlockLookup">
+          <h3>Step 1: Enter credentials</h3>
+          <p>In the <strong>Credentials</strong> section above, enter your <strong>Customer ID</strong> and <strong>API Key</strong>. Optionally set <strong>OBSERVE_CLUSTER</strong> (e.g. <code>eu-1</code>) if your Observe instance uses a regional cluster.</p>
+          <h3>Step 2: Load data</h3>
+          <p>Click <strong>Load data</strong>. The app fetches Nginx and deployment data from Observe. Wait until you see &quot;Data loaded. You can run lookups now.&quot;</p>
+          <h3>Step 3: Look up a hostname</h3>
+          <p>Enter a hostname or full URL (e.g. <code>www.abc.com</code> or <code>https://www.abc.com/path</code>) and click <strong>Look up</strong>. You get <strong>orgUid</strong>, <strong>projectUid</strong>, <strong>environmentUid</strong>, <strong>region</strong>, and the latest <strong>deployment UID</strong> and <strong>timestamp</strong>.</p>
+          <h3>Tips</h3>
+          <p>If you skip Load data and click Look up directly, the first lookup will fetch data and may take longer. Subsequent lookups use cached data for a few minutes.</p>
+        </div>
+        <p>Get orgUid, projectUid, environmentUid, region, and deployment info for a hostname.</p>
+        <div class="grid hostname-lookup-section">
+          <div class="field full">
+            <label for="hostnameInput">Hostname or URL</label>
+            <input id="hostnameInput" type="text" placeholder="www.abc.com or https://www.abc.com/..." autocomplete="off" style="max-width: 480px;">
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; align-items: center;">
+          <button type="button" class="btn-run" id="btnLoadData">Load data</button>
+          <button type="button" class="btn-run btn-secondary" id="btnHostnameLookup">Look up</button>
+        </div>
+        <div id="hostnameLookupStatus" class="status" style="display: none; margin-top: 1rem;"></div>
+        <div id="hostnameLookupResult" class="hostname-lookup-result" style="display: none; margin-top: 1rem;"></div>
       </div>
     </div>
   </div>
@@ -719,6 +765,21 @@
       });
     });
     serviceRow.style.display = 'flex';
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        document.querySelectorAll('.tab').forEach(t => {
+          t.classList.remove('active');
+          t.setAttribute('aria-selected', 'false');
+        });
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        tab.setAttribute('aria-selected', 'true');
+        const panel = document.getElementById('panel' + (target === 'dashboard' ? 'Dashboard' : 'Lookup'));
+        if (panel) panel.classList.add('active');
+      });
+    });
 
     toggleOptional.addEventListener('click', () => {
       const optional = document.querySelectorAll('.optional-fields');

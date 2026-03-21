@@ -15,6 +15,7 @@ This folder contains a script and config to extract **unique error signatures** 
 | **services.sample.json** | List of services (name, workspace_id, dataset_id, pipeline_file) for multi-service runs. |
 | **pipelines/** | OPAL pipeline files (one per service or shared). Use `{{REGION}}` for cluster filter; script replaces it at runtime. |
 | **error_report.txt** | Written on each run: table(s) of unique errors (and links). |
+| **app.py** | Flask web app: dashboard check, hostname lookup, and **Send to Slack** (formats report via Gemini and POSTs to webhook). |
 
 ### Services in `services.sample.json`
 
@@ -143,7 +144,18 @@ pip install -r requirements.txt   # includes Flask
 python3 app.py
 ```
 
-Open **http://localhost:5000**. Enter **OBSERVE_CUSTOMER_ID** and **OBSERVE_API_KEY** (required), optionally expand and set cluster, workspace, dataset, region, and time range. Choose a run mode (Single service, All services, All regions, or Auto) and click **Run dashboard check**. The report appears on the page; you can copy or download it.
+Open **http://localhost:5000** (or http://localhost:5001 if 5000 is in use). Enter **OBSERVE_CUSTOMER_ID** and **OBSERVE_API_KEY** (required), optionally expand and set cluster, workspace, dataset, region, and time range. Choose a run mode (Single service, All services, All regions, or Auto) and click **Run dashboard check**. The report appears on the page; you can copy or download it.
+
+### Send to Slack
+
+After running a dashboard check, you can format the report and send it to Slack:
+
+1. Set **SLACK_WEBHOOK_URL** in `.env` (e.g. a Slack Incoming Webhook URL or Contentstack Automations API URL).
+2. Set **GEMINI_API_KEY** in `.env` — the app uses Gemini to format the report for Slack. Get a free key at [Google AI Studio](https://aistudio.google.com/app/apikey).
+3. Run a dashboard check, then click **Send me a Slack**.
+4. Optionally enter a **Channel ID** (e.g. `C1234567890` or `D086ZCDT6B0`) in the UI to override the webhook’s default channel.
+
+The formatted message is POSTed to your webhook as JSON (`text`, `blocks`, and optionally `channel`). If no webhook is configured, the formatted message is copied to your clipboard instead.
 
 ---
 
@@ -156,6 +168,7 @@ Open **http://localhost:5000**. Enter **OBSERVE_CUSTOMER_ID** and **OBSERVE_API_
 | Run | Load `.env`, then `python3 extract_errors.py --all-services` (or `--auto`) |
 | Output | Terminal + `Observe/error_report.txt` |
 | **Web UI** | `cd Observe && python3 app.py` → open http://localhost:5000 ([details](#6-optional-run-the-web-ui)) |
+| **Send to Slack** | Set `SLACK_WEBHOOK_URL` + `GEMINI_API_KEY` in `.env` → run dashboard check → click **Send me a Slack** ([details](#send-to-slack)) |
 | **Deploy on Render** | Push to GitHub → connect repo at [Render](https://render.com) → deploy ([details](#deploy-on-render)) |
 | **Docker** | `docker build -t observe-extract-errors Observe` then `docker run --rm --env-file .env observe-extract-errors` ([details](#running-with-docker)) |
 
@@ -179,6 +192,8 @@ You can host the web UI on [Render](https://render.com) for free (with limits).
 3. **Deploy.** Render will build and run the app. Your URL will be like `https://observe-dashboard-check.onrender.com`.
 
 4. **Credentials:** The app does not store Observe credentials on the server. Users enter **OBSERVE_CUSTOMER_ID** and **OBSERVE_API_KEY** in the browser (and can save them in localStorage).
+
+5. **Slack (optional):** To enable "Send me a Slack", add **SLACK_WEBHOOK_URL** and **GEMINI_API_KEY** as environment variables in Render’s dashboard.
 
 **Note:** On the free tier, requests may time out after ~30–60 seconds. For long “Run dashboard check” runs (e.g. All services × All regions), use a single service or fewer regions, or consider a paid plan for longer timeouts.
 
@@ -261,6 +276,11 @@ export $(grep -v '^#' .env | xargs) && python3 extract_errors.py --all-services
 | **REGION** | Value for `{{REGION}}` in OPAL (cluster filter, e.g. `label(^Cluster) = "{{REGION}}"`). | `aws-na` |
 | **START_IST** | Start of time window in IST (`YYYY-MM-DD HH:MM:SS`). Optional; with **END_IST** overrides “last 24h”. | — |
 | **END_IST** | End of time window in IST. Optional. | — |
+| **SLACK_WEBHOOK_URL** | Webhook URL for "Send me a Slack" (Slack Incoming Webhook, Contentstack Automations API, or any HTTP endpoint). If set, the formatted report is POSTed here. | — |
+| **GEMINI_API_KEY** | Google Gemini API key for formatting the report as a Slack message. Get a free key at [Google AI Studio](https://aistudio.google.com/app/apikey). | — |
+| **GEMINI_MODEL** | Gemini model name. | `gemini-1.5-flash` |
+| **OBSERVE_LOOKUP_DAYS** | For hostname lookup: time range = past N days. If unset, uses 15 minutes. | — |
+| **OBSERVE_LOOKUP_TIMEOUT_SEC** | HTTP timeout (seconds) for Observe API calls in hostname lookup. Increase if queries time out with large `OBSERVE_LOOKUP_DAYS`. | `300` |
 
 **Valid regions (for REGION or --all-regions):**  
 `aws-na`, `aws-eu`, `aws-au`, `azure-na`, `azure-eu`, `gcp-na`, `gcp-eu`

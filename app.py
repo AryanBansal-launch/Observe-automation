@@ -720,7 +720,8 @@ def api_slack_message():
     try:
         data = request.get_json(silent=True) or {}
         report_text = (data.get("report_text") or "").strip()
-        webhook_url = (data.get("webhook_url") or "").strip() or SLACK_WEBHOOK_URL
+        webhook_url = SLACK_WEBHOOK_URL  # From env only; no UI override
+        channel_id = (data.get("channel_id") or "").strip()
 
         slack_message, err = _format_report_as_slack_message(report_text)
         if err:
@@ -728,8 +729,13 @@ def api_slack_message():
 
         # Build proper Slack payload: Block Kit (header, divider, mrkdwn sections) + plain text fallback
         payload = _build_slack_blocks(slack_message)
+        if channel_id:
+            payload["channel"] = channel_id
         sent_to_url = None
+        # Always log payload (visible in terminal / platform logs)
+        app.logger.info("Slack payload: %s", json.dumps(payload, default=str))
         if webhook_url:
+            app.logger.info("Posting to webhook: %s", webhook_url[:80] + "..." if len(webhook_url) > 80 else webhook_url)
             try:
                 r = requests.post(
                     webhook_url,

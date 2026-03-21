@@ -487,18 +487,16 @@
         </div>
       </div>
       <div class="slack-url-row" id="slackUrlRow">
-        <label for="slackWebhookUrl">Webhook URL (optional — payload will be POSTed here as <code>{"text": "..."}</code>) <a href="#" class="help-link" id="helpLinkWebhook">How to use it?</a></label>
+        <label for="slackChannelId">Channel ID (optional — overrides webhook default channel, e.g. C1234567890 or D086ZCDT6B0) <a href="#" class="help-link" id="helpLinkWebhook">How to use it?</a></label>
         <div class="help-block hidden" id="helpBlockWebhook" style="margin-top: 0.5rem;">
           <h3>What is this?</h3>
-          <p>After you run a dashboard check, <strong>Send me a Slack</strong> formats the report and can post it to a webhook URL (e.g. Slack incoming webhook, Microsoft Teams, or any HTTP endpoint that accepts JSON).</p>
+          <p>After you run a dashboard check, <strong>Send me a Slack</strong> formats the report and posts it to the webhook URL configured in <code>SLACK_WEBHOOK_URL</code> (env).</p>
           <h3>How to use</h3>
           <p>1. Run a <strong>dashboard check</strong> first so there is a report.<br>
-          2. (Optional) Enter a <strong>Webhook URL</strong> — e.g. a Slack Incoming Webhook URL, or leave blank to only format and copy the message.<br>
-          3. Click <strong>Send me a Slack</strong>. The app uses Gemini to format the report, then either POSTs it to your webhook or copies the formatted message to the clipboard.</p>
-          <h3>Without a webhook URL</h3>
-          <p>If you leave the Webhook URL empty, the formatted message is copied to your clipboard and shown in the status. You can paste it into Slack or anywhere else manually.</p>
+          2. (Optional) Enter a <strong>Channel ID</strong> — e.g. C1234567890 or D086ZCDT6B0 to override the webhook's default channel.<br>
+          3. Click <strong>Send me a Slack</strong>. The app uses Gemini to format the report, then POSTs it to your webhook (or copies to clipboard if no webhook is configured).</p>
         </div>
-        <input type="url" id="slackWebhookUrl" placeholder="https://your-endpoint.com/webhook" class="slack-url-input" />
+        <input type="text" id="slackChannelId" placeholder="C1234567890" class="slack-url-input" />
       </div>
       <div id="reportWrap">
         <pre id="report" class="empty">Run a check to see the report here.</pre>
@@ -523,7 +521,7 @@
     const btnCopy = document.getElementById('btnCopy');
     const btnDownload = document.getElementById('btnDownload');
     const btnSlack = document.getElementById('btnSlack');
-    const slackWebhookUrl = document.getElementById('slackWebhookUrl');
+    const slackChannelId = document.getElementById('slackChannelId');
     const statusEl = document.getElementById('status');
     const serviceSelect = document.getElementById('serviceSelect');
     const serviceRow = document.getElementById('serviceRow');
@@ -1098,14 +1096,14 @@
         showStatus('Run a dashboard check first, then click Send me a Slack.', 'error');
         return;
       }
-      const url = (slackWebhookUrl && slackWebhookUrl.value) ? slackWebhookUrl.value.trim() : '';
+      const channelId = (slackChannelId && slackChannelId.value) ? slackChannelId.value.trim() : '';
       showStatus('Formatting report with Gemini…', 'loading');
       btnSlack.disabled = true;
       try {
         const res = await fetch('/api/slack-message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ report_text: lastReportText, webhook_url: url || undefined }),
+          body: JSON.stringify({ report_text: lastReportText, channel_id: channelId || undefined }),
         });
         const data = await res.json().catch(() => ({}));
         btnSlack.disabled = false;
@@ -1115,9 +1113,9 @@
         }
         if (data.slack_message) {
           if (data.sent_to_url) {
-            showStatus('Slack message sent to your webhook URL.', 'success');
-          } else if (url) {
-            showStatus((data.error || 'Message formatted but could not send to URL. Copy below.') + ' Check payload in Network tab.', data.error ? 'error' : 'success');
+            showStatus('Slack message sent.', 'success');
+          } else if (data.error) {
+            showStatus((data.error || 'Could not send.') + ' Copy below.', 'error');
           } else {
             showStatus('Slack message ready. Copied to clipboard.', 'success');
             const toCopy = data.payload && data.payload.text ? data.payload.text : data.slack_message;

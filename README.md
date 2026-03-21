@@ -12,12 +12,14 @@ This folder contains a script and config to extract **unique error signatures** 
 |------|-------------|
 | **extract_errors.py** | Main script: calls Observe API, runs OPAL pipelines, prints/writes results. |
 | **env.sample** | Sample environment variables. Copy to `.env` and set values (do not commit real keys). |
-| **services.sample.json** | List of services (name, workspace_id, dataset_id, pipeline_file) for multi-service runs. |
+| **config/services.sample.json** | List of services (name, workspace_id, dataset_id, pipeline_file) for multi-service runs. |
 | **pipelines/** | OPAL pipeline files (one per service or shared). Use `{{REGION}}` for cluster filter; script replaces it at runtime. |
 | **error_report.txt** | Written on each run: table(s) of unique errors (and links). |
-| **app.py** | Flask web app: dashboard check, hostname lookup, and **Send to Slack** (formats report via Gemini and POSTs to webhook). |
+| **app.py** | Flask web app: dashboard check, hostname lookup, **Fix** (single-error analysis), and **Send to Slack** (formats report via Gemini and POSTs to webhook). |
+| **test.sh** | Runs Cursor agent to analyze errors and suggest fixes. Used by the Fix button or manually with `--error-file`. |
+| **docs/RUNBOOK.md** | Known-error runbook: maps common errors (e.g. `DeploymentControllerRMQ`) to root causes and fixes. |
 
-### Services in `services.sample.json`
+### Services in `config/services.sample.json`
 
 - Launch Management  
 - Launch Management Background Jobs Service  
@@ -29,6 +31,30 @@ This folder contains a script and config to extract **unique error signatures** 
 - Launch Deployment Agent  
 
 Each entry can override `workspace_id`, `dataset_id`, and `pipeline_file`. Pipeline files live under `pipelines/` and must output columns: `latest_timestamp`, `total_occurrences`, `error_msg`, `context`.
+
+### Project structure
+
+```
+Observe/
+├── app.py                 # Flask web app (dashboard check, Fix, Slack)
+├── extract_errors.py      # Error extraction script
+├── test.sh                # Fix flow: runs Cursor agent on errors
+├── config/
+│   └── services.sample.json   # Service definitions for multi-service runs
+├── docs/
+│   └── RUNBOOK.md         # Known-error runbook
+├── output/                # Generated files (gitignored)
+│   ├── error_report.txt   # Full report from extract_errors
+│   ├── error_to_fix.txt   # Single error for Fix button
+│   └── agent_analysis.md  # Cursor agent analysis output
+├── pipelines/             # OPAL pipeline files per service
+├── static/
+│   └── index.html         # Web UI
+├── env.sample             # Environment template (copy to .env)
+├── requirements.txt
+├── Dockerfile
+└── README.md
+```
 
 ---
 
@@ -125,7 +151,7 @@ export $(grep -v '^#' .env | xargs)
 # Single service (default workspace/dataset from .env)
 python3 extract_errors.py
 
-# All services from services.sample.json
+# All services from config/services.sample.json
 python3 extract_errors.py --all-services
 
 # All services × all regions (full report)
@@ -157,6 +183,60 @@ After running a dashboard check, you can format the report and send it to Slack:
 
 The formatted message is POSTed to your webhook as JSON (`text`, `blocks`, and optionally `channel`). If no webhook is configured, the formatted message is copied to your clipboard instead.
 
+### Fix flow (single-error analysis)
+
+The **Fix** button runs the Cursor agent to analyze a single error and suggest concrete fixes in your codebase.
+
+#### Prerequisites
+
+- **Cursor CLI** – Install the Cursor agent CLI and ensure `agent` is in your PATH.
+- **Workspace setup** – The agent can only modify code it can see. Set `AGENT_WORKSPACE` to a directory that contains both this Observe app and the repos that produce the errors (e.g. `contentfly-management-background-jobs-service`).
+
+#### How to use
+
+1. Run a dashboard check and wait for the report.
+2. Click **Fix** next to the error you want to analyze.
+3. The app writes `output/error_to_fix.txt` and starts `test.sh` automatically.
+4. Output appears in your terminal and in `output/agent_analysis.md`.
+
+#### Configuration (in `.env`)
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| **AGENT_MODEL** | Cursor agent model. Run `agent models` to list options. | `composer-1.5` |
+| **AGENT_WORKSPACE** | Root directory the agent can read and modify. Must include the repos with the code that throws the errors. | `../` (parent of Observe) |
+
+**Example:** If your layout is:
+
+```
+/Users/you/
+├── Observe-automation/Observe/     ← this app
+└── contentfly-management-background-jobs-service/   ← service that produces errors
+```
+
+Set in `.env`:
+
+```
+AGENT_WORKSPACE=/Users/you
+```
+
+Then the agent can suggest and apply fixes in both repos.
+
+#### Manual run
+
+You can also run the fix flow manually:
+
+```bash
+# After clicking Fix, or if you have output/error_to_fix.txt:
+./test.sh --error-file output/error_to_fix.txt
+
+# With a different model:
+./test.sh --error-file output/error_to_fix.txt --model <model-name>
+
+# Full report (runs extract_errors.py first, then agent):
+./test.sh
+```
+
 ---
 
 ## Quick reference
@@ -169,6 +249,7 @@ The formatted message is POSTed to your webhook as JSON (`text`, `blocks`, and o
 | Output | Terminal + `Observe/error_report.txt` |
 | **Web UI** | `cd Observe && python3 app.py` → open http://localhost:5000 ([details](#6-optional-run-the-web-ui)) |
 | **Send to Slack** | Set `SLACK_WEBHOOK_URL` + `GEMINI_API_KEY` in `.env` → run dashboard check → click **Send me a Slack** ([details](#send-to-slack)) |
+| **Fix flow** | Set `AGENT_WORKSPACE` (and optionally `AGENT_MODEL`) in `.env` → run dashboard check → click **Fix** next to an error ([details](#fix-flow-single-error-analysis)) |
 | **Deploy on Render** | Push to GitHub → connect repo at [Render](https://render.com) → deploy ([details](#deploy-on-render)) |
 | **Docker** | `docker build -t observe-extract-errors Observe` then `docker run --rm --env-file .env observe-extract-errors` ([details](#running-with-docker)) |
 
@@ -279,6 +360,8 @@ export $(grep -v '^#' .env | xargs) && python3 extract_errors.py --all-services
 | **SLACK_WEBHOOK_URL** | Webhook URL for "Send me a Slack" (Slack Incoming Webhook, Contentstack Automations API, or any HTTP endpoint). If set, the formatted report is POSTed here. | — |
 | **GEMINI_API_KEY** | Google Gemini API key for formatting the report as a Slack message. Get a free key at [Google AI Studio](https://aistudio.google.com/app/apikey). | — |
 | **GEMINI_MODEL** | Gemini model name. | `gemini-1.5-flash` |
+| **AGENT_MODEL** | Cursor agent model for Fix flow. Run `agent models` to list options. | `composer-1.5` |
+| **AGENT_WORKSPACE** | Root directory for Fix flow. Must include repos with the code that produces the errors. | `../` |
 | **OBSERVE_LOOKUP_DAYS** | For hostname lookup: time range = past N days. If unset, uses 15 minutes. | — |
 | **OBSERVE_LOOKUP_TIMEOUT_SEC** | HTTP timeout (seconds) for Observe API calls in hostname lookup. Increase if queries time out with large `OBSERVE_LOOKUP_DAYS`. | `300` |
 
@@ -317,7 +400,7 @@ python3 extract_errors.py -d 41250854 -p pipelines/launch_nginx_errors.opal
 python3 extract_errors.py --all-services
 ```
 
-Finds `services.sample.json` next to `extract_errors.py` (or in cwd) and runs every service in it.
+Finds `config/services.sample.json` and runs every service in it.
 
 ### Custom services config
 
@@ -375,7 +458,7 @@ python3 extract_errors.py -w <workspace_id> -d <dataset_id>
 | **--end** | — | End time in IST. Env: `END_IST`. |
 | **--pipeline-file** | **-p** | Path to OPAL pipeline file (single-service). |
 | **--config** | **-c** | Path to JSON file listing services (name, workspace_id, dataset_id, pipeline_file). |
-| **--all-services** | — | Use `services.sample.json` in this folder (or cwd) as config. |
+| **--all-services** | — | Use `config/services.sample.json` as config. |
 | **--all-regions** | — | Run for every region (`aws-na`, `aws-eu`, …) and print/write combined output. |
 | **--auto** | — | Same as `--all-services --all-regions` (all services × all regions). |
 
@@ -384,7 +467,7 @@ python3 extract_errors.py -w <workspace_id> -d <dataset_id>
 ## Output
 
 - **Terminal:** Progress lines like `🚀 Extracting unique error signatures from <service> [region: <region>]...` and one table per service (and per region when using `--all-regions`).  
-- **error_report.txt:** Same table(s) in one file (IST timestamp, count, error & context, link to Observe log explorer).
+- **output/error_report.txt:** Same table(s) in one file (IST timestamp, count, error & context, link to Observe log explorer).
 
 ---
 
@@ -405,4 +488,4 @@ For full steps see [Setup (step-by-step)](#setup-step-by-step). Short version:
 2. `cd Observe` → copy `env.sample` to `.env` and set **OBSERVE_CUSTOMER_ID** and **OBSERVE_API_KEY**
 3. Load env: `export $(grep -v '^#' .env | xargs)` (or `set -a && source .env && set +a`)
 4. Run: `python3 extract_errors.py --all-services` or `python3 extract_errors.py --auto`
-5. Check **error_report.txt** for the full report
+5. Check **output/error_report.txt** for the full report

@@ -32,7 +32,7 @@ except ImportError:
 
 app = Flask(__name__, static_folder="static")
 SCRIPT_DIR = Path(__file__).resolve().parent
-SERVICES_CONFIG = SCRIPT_DIR / "services.sample.json"
+SERVICES_CONFIG = SCRIPT_DIR / "config" / "services.sample.json"
 
 # In-memory job store (use --workers 1 so one process owns it)
 _jobs = {}
@@ -142,6 +142,25 @@ NGINX_WORKSPACE = "41096433"
 NGINX_DATASET = "41250854"
 MGMT_BG_WORKSPACE = "41096433"
 MGMT_BG_DATASET = "41249174"
+
+# Known errors with runbook sections (pattern -> runbook section anchor)
+KNOWN_ERRORS_RUNBOOK = [
+    (
+        "DeploymentControllerRMQ",
+        "deployment-oncreate-deploymentcontrollerrmq",
+        "Check RabbitMQ health; correlate with [AmqpConnection] / [Server] RMQ disconnects. See docs/RUNBOOK.md.",
+    ),
+]
+
+
+def _get_runbook_suggestion(error_msg):
+    """If error_msg matches a known pattern, return runbook section and short hint. Else None."""
+    if not error_msg or not isinstance(error_msg, str):
+        return None
+    msg_lower = error_msg.lower()
+    for pattern, section, hint in KNOWN_ERRORS_RUNBOOK:
+        if pattern.lower() in msg_lower:
+            return {"section": section, "hint": hint, "file": "docs/RUNBOOK.md"}
 
 
 def normalize_hostname(url_or_host):
@@ -770,6 +789,114 @@ def api_slack_message():
 
 
 # No startup prefetch; prefetch runs only when user triggers it via UI (Load data button) or on first Look up.
+
+
+def _build_single_error_report(region, service, timestamp, count, error_msg, link, include_runbook=True):
+    """Build a minimal error report in the same format as extract_errors.py output.
+    When include_runbook is True and error_msg matches a known pattern, appends RUNBOOK guidance."""
+    def _format_table(rows, headers, msg_max_width=400, link_width=220):
+        if not rows:
+            return ""
+        n = len(headers)
+        msg_col = -2 if n == 4 else -1
+        max_msg = max((len(str(row[msg_col])) for row in rows), default=0)
+        w_msg = min(max(max_msg, 40), msg_max_width)
+        if n == 4:
+            widths = [24, 8, w_msg, min(link_width, max((len(str(row[-1])) for row in rows), default=link_width))]
+        else:
+            widths = [24, 8, w_msg][:n]
+        sep = "+" + "+".join("-" * (w + 2) for w in widths) + "+"
+        lines = [sep]
+        lines.append("| " + " | ".join(str(h)[:w].ljust(w) for h, w in zip(headers, widths)) + " |")
+        lines.append(sep)
+        for row in rows:
+            cells = []
+            for i, cell in enumerate(row):
+                s = str(cell) if cell is not None else ""
+                cells.append(s[: widths[i]].ljust(widths[i]) if i < len(widths) else s)
+            lines.append("| " + " | ".join(cells) + " |")
+        lines.append(sep)
+        return "\n".join(lines)
+
+    region_block = f"""
+============================================================
+=== Region: {region} ===
+============================================================
+
+=== {service} ===
+
+"""
+    headers = ("IST Timestamp", "Count", "Error & Context", "Link")
+    rows = [(timestamp or "N/A", count or "0", error_msg or "", link or "")]
+    table = _format_table(rows, headers, msg_max_width=800, link_width=220)
+    report = region_block + "\n" + table + "\n"
+
+    # Append RUNBOOK guidance for known error patterns (e.g. DeploymentControllerRMQ)
+    if include_runbook and error_msg:
+        runbook = _get_runbook_suggestion(error_msg)
+        if runbook:
+            report += f"""
+---
+RUNBOOK (docs/RUNBOOK.md): {runbook['hint']}
+Correlation: In the Log Explorer link above, filter for: "Disconnected from RMQ" OR "AmqpConnection" OR "KubernetesService" OR "DeploymentService" within the time window.
+---
+"""
+    return report
+
+
+@app.route("/api/fix-error", methods=["POST"])
+def api_fix_error():
+    """
+    Write a single-error report to error_to_fix.txt for use with test.sh --error-file.
+    Body: { region, service, timestamp, count, error_msg, link }
+    Returns: { success, file_path, command }
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        region = (data.get("region") or "").strip() or "aws-na"
+        service = (data.get("service") or "").strip() or "Unknown"
+        timestamp = (data.get("timestamp") or "").strip()
+        count = (data.get("count") or "0").strip()
+        error_msg = (data.get("error_msg") or "").strip()
+        link = (data.get("link") or "").strip()
+
+        report = _build_single_error_report(region, service, timestamp, count, error_msg, link)
+        out_dir = SCRIPT_DIR / "output"
+        out_dir.mkdir(exist_ok=True)
+        out_path = out_dir / "error_to_fix.txt"
+        with open(out_path, "w") as f:
+            f.write(report)
+
+        test_sh = SCRIPT_DIR / "test.sh"
+        error_file_arg = "output/error_to_fix.txt"
+        cmd = f"./test.sh --error-file {error_file_arg}"
+        script_started = False
+        if test_sh.is_file():
+            subprocess.Popen(
+                ["./test.sh", "--error-file", error_file_arg],
+                cwd=str(SCRIPT_DIR),
+                env=os.environ.copy(),
+                start_new_session=True,
+            )
+            message = "Fix script started. Output will appear in your terminal and in output/agent_analysis.md"
+            script_started = True
+        else:
+            message = f"Wrote {out_path.name}. Run in terminal: {cmd}"
+
+        out = {
+            "success": True,
+            "file_path": error_file_arg,
+            "command": cmd,
+            "message": message,
+            "script_started": script_started,
+        }
+        runbook = _get_runbook_suggestion(error_msg)
+        if runbook:
+            out["runbook_suggestion"] = runbook
+        return jsonify(out), 200
+    except Exception as e:
+        logger.exception("fix-error failed")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def _run_prefetch_with_creds(env_vars):

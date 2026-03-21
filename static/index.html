@@ -250,6 +250,19 @@
       color: var(--text-muted);
     }
     .report-tables .col-region, .report-tables .col-svc { white-space: nowrap; }
+    .report-tables .col-fix { white-space: nowrap; width: 1%; }
+    .btn-fix {
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      border: 1px solid var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .btn-fix:hover { background: rgba(88, 166, 255, 0.25); color: var(--accent-hover); }
     .status {
       padding: 0.5rem 0.75rem;
       border-radius: 6px;
@@ -406,13 +419,57 @@
       box-shadow: var(--shadow);
       margin-bottom: var(--section-gap);
     }
+    .about-toggle {
+      font-size: 0.9rem;
+      color: var(--accent);
+      cursor: pointer;
+      margin-bottom: 1rem;
+      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .about-toggle:hover { text-decoration: underline; }
+    .about-toggle::before { content: '▶'; font-size: 0.7rem; transition: transform 0.2s; }
+    .about-toggle.expanded::before { transform: rotate(90deg); }
+    .about-block {
+      padding: 1.25rem 1.5rem;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: var(--section-gap);
+      font-size: 0.9rem;
+      line-height: 1.6;
+      color: var(--text-muted);
+    }
+    .about-block.hidden { display: none; }
+    .about-block h3 { font-size: 0.85rem; color: var(--text); margin: 0 0 0.5rem 0; }
+    .about-block h3:not(:first-child) { margin-top: 1rem; }
+    .about-block ul { margin: 0.5rem 0 0 1.25rem; padding: 0; }
+    .about-block li { margin-bottom: 0.35rem; }
+    .about-block .feature-name { color: var(--accent); font-weight: 500; }
+    .about-block code { font-family: 'JetBrains Mono', monospace; font-size: 0.8em; background: var(--surface); padding: 0.1em 0.35em; border-radius: 4px; }
   </style>
 </head>
 <body>
   <div class="container">
     <header class="page-header">
       <h1>Contentstack Launch Observe</h1>
-      <p class="subtitle">Dashboard check and hostname lookup for Observe.</p>
+      <p class="subtitle">Dashboard check, Fix flow, hostname lookup, and Slack for Observe.</p>
+      <div class="about-toggle" id="aboutToggle" aria-expanded="false">About this app & how to use it</div>
+      <div class="about-block hidden" id="aboutBlock">
+        <h3>What it does</h3>
+        <p>This app extracts error reports from Observe log datasets, lets you analyze and fix individual errors with AI, look up hostnames to find deployments, and send formatted reports to Slack.</p>
+        <h3>Features</h3>
+        <ul>
+          <li><span class="feature-name">Dashboard Check</span> – Run error extraction for one service, all services, or all regions. Results appear in a table with links to Observe Log Explorer.</li>
+          <li><span class="feature-name">Fix</span> – Click Fix next to any error to run the Cursor agent on that single error. Output goes to <code>output/agent_analysis.md</code>. Requires Cursor CLI and <code>AGENT_WORKSPACE</code> in .env.</li>
+          <li><span class="feature-name">Lookup by Hostname</span> – Enter a hostname or URL to get orgUid, projectUid, environmentUid, region, and deployment info from Nginx + Mgmt data.</li>
+          <li><span class="feature-name">Send me a Slack</span> – Format the report with Gemini and POST to your webhook. Set <code>SLACK_WEBHOOK_URL</code> and <code>GEMINI_API_KEY</code> in .env.</li>
+        </ul>
+        <h3>Quick start</h3>
+        <p>1. Enter <strong>Customer ID</strong> and <strong>API Key</strong> below. 2. Choose a run mode and click <strong>Run dashboard check</strong>. 3. Use Copy, Download, Fix, or Send me a Slack on the report.</p>
+      </div>
     </header>
 
     <section>
@@ -696,9 +753,13 @@
         if (sec.title || ctx.service) parts.push('<div class="section-title">' + escapeHtml(sec.title || ctx.service || '') + (secRegion ? ' · ' + escapeHtml(secRegion) : '') + '</div>');
         parts.push('<table><thead><tr><th>Region</th><th>Service</th>');
         for (const h of sec.headers) parts.push('<th>' + escapeHtml(h) + '</th>');
-        parts.push('</tr></thead><tbody>');
+        parts.push('<th>Fix</th></tr></thead><tbody>');
         const colClass = ['col-ts', 'col-count', 'col-msg', 'col-link'];
         for (const row of sec.rows) {
+          const ts = row[0] || '';
+          const cnt = row[1] != null ? String(row[1]) : '';
+          const msg = row[2] || '';
+          const lnk = row[3] || '';
           parts.push('<tr>');
           parts.push('<td class="col-region">' + escapeHtml(secRegion) + '</td>');
           parts.push('<td class="col-svc">' + escapeHtml(secTitle) + '</td>');
@@ -710,6 +771,7 @@
               parts.push('<td class="' + cls + '">' + escapeHtml(cell) + '</td>');
             }
           });
+          parts.push('<td class="col-fix"><button type="button" class="btn-fix" data-region="' + escapeAttr(secRegion) + '" data-service="' + escapeAttr(secTitle) + '" data-ts="' + escapeAttr(ts) + '" data-count="' + escapeAttr(cnt) + '" data-msg="' + escapeAttr(msg) + '" data-link="' + escapeAttr(lnk) + '">Fix</button></td>');
           parts.push('</tr>');
         }
         parts.push('</tbody></table>');
@@ -722,6 +784,10 @@
       const div = document.createElement('div');
       div.textContent = s;
       return div.innerHTML;
+    }
+    function escapeAttr(s) {
+      if (s == null) return '';
+      return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     function escapeCsvField(s) {
@@ -914,6 +980,15 @@
       }
     });
 
+    const aboutToggle = document.getElementById('aboutToggle');
+    const aboutBlock = document.getElementById('aboutBlock');
+    if (aboutToggle && aboutBlock) {
+      aboutToggle.addEventListener('click', () => {
+        aboutBlock.classList.toggle('hidden');
+        aboutToggle.classList.toggle('expanded', !aboutBlock.classList.contains('hidden'));
+        aboutToggle.setAttribute('aria-expanded', aboutBlock.classList.contains('hidden') ? 'false' : 'true');
+      });
+    }
     const helpLink = document.getElementById('helpLink');
     const helpBlock = document.getElementById('helpBlock');
     if (helpLink && helpBlock) {
@@ -1121,6 +1196,35 @@
         return false;
       }
     }
+
+    reportWrap.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn-fix');
+      if (!btn) return;
+      e.preventDefault();
+      const region = btn.dataset.region || '';
+      const service = btn.dataset.service || '';
+      const timestamp = btn.dataset.ts || '';
+      const count = btn.dataset.count || '';
+      const errorMsg = btn.dataset.msg || '';
+      const link = btn.dataset.link || '';
+      fetch('/api/fix-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ region, service, timestamp, count, error_msg: errorMsg, link }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            showStatus(data.message || 'Fix started.', 'success');
+            if (!data.script_started && data.command && navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(data.command).catch(() => {});
+            }
+          } else {
+            showStatus(data.error || 'Fix failed', 'error');
+          }
+        })
+        .catch(err => showStatus('Request failed: ' + err.message, 'error'));
+    });
 
     btnCopy.addEventListener('click', () => {
       if (!lastReportText) {

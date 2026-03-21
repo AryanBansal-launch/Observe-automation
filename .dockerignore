@@ -2,6 +2,7 @@
 .venv
 __pycache__
 *.pyc
+output/
 error_report.txt
 .git
 .dockerignore

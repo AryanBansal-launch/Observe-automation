@@ -20,8 +20,8 @@ DEFAULT_DATASET_ID = os.environ.get("OBSERVE_DATASET_ID", "41250854")
 REGIONS = ["aws-na", "aws-eu", "aws-au", "azure-na", "azure-eu", "gcp-na", "gcp-eu"]
 
 # Default filenames (config for --all-services, output report)
-DEFAULT_SERVICES_CONFIG = "services.sample.json"
-OUTPUT_REPORT_FILE = "error_report.txt"
+DEFAULT_SERVICES_CONFIG = "config/services.sample.json"
+OUTPUT_REPORT_FILE = "output/error_report.txt"
 
 # Default OPAL pipeline (log JSON with level, message, context). Custom pipelines must output same columns:
 # latest_timestamp, total_occurrences, error_msg, context (so the table and links work).
@@ -233,6 +233,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     out_file = args.output or OUTPUT_REPORT_FILE
+    out_dir = os.path.dirname(out_file)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
 
     if args.auto:
         args.all_services = True
@@ -244,7 +247,7 @@ if __name__ == "__main__":
     config_path = args.config
     if args.all_services and not config_path:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        for path in (os.path.join(script_dir, DEFAULT_SERVICES_CONFIG), DEFAULT_SERVICES_CONFIG):
+        for path in (os.path.join(script_dir, DEFAULT_SERVICES_CONFIG), os.path.join(script_dir, "config", "services.sample.json"), DEFAULT_SERVICES_CONFIG):
             if os.path.isfile(path):
                 config_path = path
                 break

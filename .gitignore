@@ -13,8 +13,8 @@ __pycache__/
 venv/
 env/
 
-# Generated report (script output)
-Observe/error_report.txt
+# Generated output (reports, fix files, agent analysis)
+output/
 error_report.txt
 
 # OS

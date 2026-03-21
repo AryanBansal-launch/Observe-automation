@@ -1,0 +1,14 @@
+# Observe – CLI only (extract_errors.py)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy app (scripts, config, pipelines); .dockerignore excludes .env and output/
+COPY . .
+
+ENTRYPOINT ["python3", "extract_errors.py"]
+CMD ["--all-services"]

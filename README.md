@@ -52,7 +52,8 @@ Observe/
 │   └── index.html         # Web UI
 ├── env.sample             # Environment template (copy to .env)
 ├── requirements.txt
-├── Dockerfile
+├── Dockerfile              # Web app
+├── Dockerfile.cli         # CLI (extract_errors)
 └── README.md
 ```
 
@@ -251,7 +252,7 @@ You can also run the fix flow manually:
 | **Send to Slack** | Set `SLACK_WEBHOOK_URL` + `GEMINI_API_KEY` in `.env` → run dashboard check → click **Send me a Slack** ([details](#send-to-slack)) |
 | **Fix flow** | Set `AGENT_WORKSPACE` (and optionally `AGENT_MODEL`) in `.env` → run dashboard check → click **Fix** next to an error ([details](#fix-flow-single-error-analysis)) |
 | **Deploy on Render** | Push to GitHub → connect repo at [Render](https://render.com) → deploy ([details](#deploy-on-render)) |
-| **Docker** | `docker build -t observe-extract-errors Observe` then `docker run --rm --env-file .env observe-extract-errors` ([details](#running-with-docker)) |
+| **Docker** | Web app: `docker build -t observe .` then `docker run -p 5000:5000 --env-file .env observe`. CLI: `docker build -f Dockerfile.cli -t observe-cli .` ([details](#running-with-docker)) |
 
 ---
 
@@ -282,55 +283,34 @@ You can host the web UI on [Render](https://render.com) for free (with limits).
 
 ## Running with Docker
 
-You can run the tool in a container so you don’t need Python installed locally.
-
-### Build the image
-
-From the **Observe** folder (or project root with `-f`):
+Two Dockerfiles: **Dockerfile** (web app) and **Dockerfile.cli** (CLI only).’
+### Web app
 
 ```bash
 cd Observe
-docker build -t observe-extract-errors .
+docker build -t observe .
+docker run -p 5000:5000 --env-file .env observe
 ```
 
-Or from project root:
+Open **http://localhost:5000**. Credentials are entered in the browser (not stored on the server).
 
-```bash
-docker build -t observe-extract-errors -f Observe/Dockerfile Observe
-```
+**Note:** The Fix flow requires Cursor CLI and runs outside the container, so it does not work when the app runs in Docker. Use the app locally for Fix.
 
-### Run with env file
-
-Create `.env` in `Observe/` (from `env.sample`) with your credentials, then:
+### CLI (extract_errors)
 
 ```bash
 cd Observe
-docker run --rm --env-file .env observe-extract-errors
+docker build -f Dockerfile.cli -t observe-cli .
+docker run --rm --env-file .env observe-cli --all-services
+docker run --rm --env-file .env observe-cli --auto
 ```
 
-Default command is `--all-services`. Override with any flags:
+### Save the report to your host (CLI)
+
+Mount a directory to get `output/error_report.txt` on your machine:
 
 ```bash
-docker run --rm --env-file .env observe-extract-errors --auto
-docker run --rm --env-file .env observe-extract-errors -d 41250854 -p pipelines/launch_nginx_errors.opal
-```
-
-### Run with inline env (no .env file)
-
-```bash
-docker run --rm \
-  -e OBSERVE_CUSTOMER_ID=your_customer_id \
-  -e OBSERVE_API_KEY=your_api_key \
-  -e OBSERVE_CLUSTER=eu-1 \
-  observe-extract-errors --all-services
-```
-
-### Save the report to your host
-
-The script writes `error_report.txt` inside the container. Mount a directory to get it on your machine:
-
-```bash
-docker run --rm --env-file .env -v "$(pwd)/output:/app" observe-extract-errors --auto
+docker run --rm --env-file .env -v "$(pwd)/output:/app/output" observe-cli --auto
 ```
 
 Then open `./output/error_report.txt`.

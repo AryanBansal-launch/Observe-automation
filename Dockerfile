@@ -1,4 +1,4 @@
-# Observe error extraction – run without installing Python locally
+# Observe – web app (Flask + gunicorn)
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -7,9 +7,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app (script, config, pipelines); .dockerignore excludes .env and cache
+# Copy app (Flask, scripts, config, pipelines); .dockerignore excludes .env and output/
 COPY . .
 
-# Pass env at runtime (--env-file .env or -e). Override args: docker run ... --auto
-ENTRYPOINT ["python3", "extract_errors.py"]
-CMD ["--all-services"]
+ENV PORT=5000
+EXPOSE 5000
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} --workers 1 --timeout 330 app:app"]

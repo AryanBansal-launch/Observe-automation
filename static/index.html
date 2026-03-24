@@ -251,6 +251,148 @@
     }
     .report-tables .col-region, .report-tables .col-svc { white-space: nowrap; }
     .report-tables .col-fix { white-space: nowrap; width: 1%; }
+
+    /* ── Slack preview panel ── */
+    .slack-preview-wrap {
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .slack-preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.65rem 1rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+    .slack-preview-header span { flex: 1; min-width: 0; }
+    .slack-preview-header-actions { display: flex; gap: 0.5rem; align-items: center; }
+    .btn-copy-slack {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      width: 36px;
+      height: 32px;
+      padding: 0;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .btn-copy-slack:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .btn-copy-slack.copied {
+      color: var(--success);
+      border-color: var(--success);
+      background: rgba(63, 185, 80, 0.12);
+    }
+    .btn-copy-slack svg { width: 16px; height: 16px; display: block; }
+    .btn-toggle-raw {
+      display: inline-flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-elevated);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      white-space: nowrap;
+    }
+    .btn-toggle-raw:hover {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .btn-toggle-raw.active {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    /* Rendered Slack preview */
+    .slack-preview-rendered {
+      padding: 1rem 1.25rem 1.5rem;
+      max-height: 45vh;
+      overflow: auto;
+      font-family: 'DM Sans', system-ui, sans-serif;
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg-elevated);
+    }
+    .slack-preview-rendered .sp-region {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 1.1rem 0 0.5rem 0;
+      padding-bottom: 0.3rem;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .slack-preview-rendered .sp-region:first-child { margin-top: 0; }
+    .slack-preview-rendered .sp-service {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 0.85rem 0 0.3rem 0;
+    }
+    .slack-preview-rendered .sp-item {
+      display: flex;
+      gap: 0.5rem;
+      padding: 0.2rem 0 0.2rem 0.5rem;
+      font-size: 13px;
+      color: var(--text);
+      border-left: 2px solid var(--border-subtle);
+      margin-bottom: 0.35rem;
+    }
+    .slack-preview-rendered .sp-num {
+      color: var(--text-muted);
+      flex-shrink: 0;
+      min-width: 1.4rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .slack-preview-rendered .sp-body { flex: 1; min-width: 0; word-break: break-word; }
+    .slack-preview-rendered .sp-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 12px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .slack-preview-rendered .sp-link:hover { text-decoration: underline; }
+    .slack-preview-rendered .sp-empty { color: var(--text-muted); font-style: italic; font-size: 13px; }
+
+    /* Raw Slack mrkdwn (hidden by default) */
+    .slack-preview-raw {
+      display: none;
+      margin: 0;
+      padding: 1rem 1rem 1.25rem;
+      max-height: 45vh;
+      overflow: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--text);
+      background: var(--bg-elevated);
+    }
+    .slack-preview-raw.visible { display: block; }
+    .slack-preview-rendered.hidden { display: none; }
+
     .btn-fix {
       padding: 0.25rem 0.5rem;
       border-radius: 4px;
@@ -456,7 +598,7 @@
     <header class="page-header">
       <h1>Contentstack Launch Observe</h1>
       <p class="subtitle">Dashboard check, Fix flow, hostname lookup, and Slack for Observe.</p>
-      <div class="about-toggle" id="aboutToggle" aria-expanded="false">About this app & how to use it</div>
+      <div class="about-toggle" id="aboutToggle" aria-expanded="false">About this app &amp; how to use it</div>
       <div class="about-block hidden" id="aboutBlock">
         <h3>What it does</h3>
         <p>This app extracts error reports from Observe log datasets, lets you analyze and fix individual errors with AI, look up hostnames to find deployments, and send formatted reports to Slack.</p>
@@ -552,29 +694,29 @@
         <div id="status" class="status" style="display: none; margin-top: 1rem;"></div>
         <h2 class="output-section-title" style="margin-top: 2rem;">Report</h2>
         <div class="output-wrap">
-      <div class="output-header">
-        <span>Report</span>
-        <div class="output-actions">
-          <button type="button" class="btn-copy" id="btnCopy">Copy</button>
-          <button type="button" class="btn-dl" id="btnDownload">Download</button>
-          <button type="button" class="btn-dl" id="btnSlack">Send me a Slack</button>
-        </div>
-      </div>
-      <div class="slack-url-row" id="slackUrlRow">
-        <label for="slackChannelId">Channel ID (optional — overrides webhook default channel, e.g. C1234567890 or D086ZCDT6B0) <a href="#" class="help-link" id="helpLinkWebhook">How to use it?</a></label>
-        <div class="help-block hidden" id="helpBlockWebhook" style="margin-top: 0.5rem;">
-          <h3>What is this?</h3>
-          <p>After you run a dashboard check, <strong>Send me a Slack</strong> formats the report and posts it to the webhook URL configured in <code>SLACK_WEBHOOK_URL</code> (env).</p>
-          <h3>How to use</h3>
-          <p>1. Run a <strong>dashboard check</strong> first so there is a report.<br>
-          2. (Optional) Enter a <strong>Channel ID</strong> — e.g. C1234567890 or D086ZCDT6B0 to override the webhook's default channel.<br>
-          3. Click <strong>Send me a Slack</strong>. The app uses Gemini to format the report, then POSTs it to your webhook (or copies to clipboard if no webhook is configured).</p>
-        </div>
-        <input type="text" id="slackChannelId" placeholder="C1234567890" class="slack-url-input" />
-      </div>
-      <div id="reportWrap">
-        <pre id="report" class="empty">Run a check to see the report here.</pre>
-      </div>
+          <div class="output-header">
+            <span>Report</span>
+            <div class="output-actions">
+              <button type="button" class="btn-copy" id="btnCopy">Copy</button>
+              <button type="button" class="btn-dl" id="btnDownload">Download</button>
+              <button type="button" class="btn-dl" id="btnSlack">Send me a Slack</button>
+            </div>
+          </div>
+          <div class="slack-url-row" id="slackUrlRow">
+            <label for="slackChannelId">Channel ID (optional — overrides webhook default channel, e.g. C1234567890 or D086ZCDT6B0) <a href="#" class="help-link" id="helpLinkWebhook">How to use it?</a></label>
+            <div class="help-block hidden" id="helpBlockWebhook" style="margin-top: 0.5rem;">
+              <h3>What is this?</h3>
+              <p>After you run a dashboard check, <strong>Send me a Slack</strong> formats the report and posts it to the webhook URL configured in <code>SLACK_WEBHOOK_URL</code> (env).</p>
+              <h3>How to use</h3>
+              <p>1. Run a <strong>dashboard check</strong> first so there is a report.<br>
+              2. (Optional) Enter a <strong>Channel ID</strong> — e.g. C1234567890 or D086ZCDT6B0 to override the webhook's default channel.<br>
+              3. Click <strong>Send me a Slack</strong>. The app uses Gemini to format the report, then POSTs it to your webhook (or copies to clipboard if no webhook is configured).</p>
+            </div>
+            <input type="text" id="slackChannelId" placeholder="C1234567890" class="slack-url-input" />
+          </div>
+          <div id="reportWrap">
+            <pre id="report" class="empty">Run a check to see the report here.</pre>
+          </div>
         </div>
       </div>
 
@@ -657,6 +799,87 @@
     let lastReportText = '';
     let lastReportSections = null;
     let lastRunContext = null;
+    let lastSlackMrkdwn = '';
+
+    // ── mrkdwn renderer ──────────────────────────────────────────────────────
+    // Converts Slack mrkdwn produced by reportSectionsToSlackMrkdwn() into
+    // structured HTML. Understands:
+    //   *BOLD*         → region header
+    //   *bold*         → service subheader
+    //   "     N. ..."  → numbered item line (with optional <url|label> link)
+    //   blank line     → section separator
+    function renderSlackMrkdwnToHtml(mrkdwn) {
+      if (!mrkdwn || !mrkdwn.trim()) {
+        return '<div class="slack-preview-rendered"><span class="sp-empty">No Slack message to preview.</span></div>';
+      }
+      const lines = mrkdwn.split('\n');
+      const parts = [];
+      parts.push('<div class="slack-preview-rendered">');
+
+      // Track whether we're inside a section
+      let inSection = false;
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // blank line → spacer between sections
+        if (!line.trim()) {
+          continue;
+        }
+
+        // *REGION* — top-level bold (all-caps region name)
+        const regionMatch = line.match(/^\*([^*]+)\*$/);
+        if (regionMatch) {
+          const inner = regionMatch[1];
+          // Heuristic: region headers are short and typically uppercase or contain dashes
+          // Service headers are *also* bold but follow a region header
+          // We distinguish: if the next non-blank line is also bold, this is a region;
+          // otherwise treat as service. Simpler: region is always first bold after a blank.
+          // Actually let's check: if inner looks like a region (uppercase, dashes, no spaces except around -)
+          const isRegion = /^[A-Z0-9][A-Z0-9\-\s]+$/.test(inner) && inner.length < 30;
+          if (isRegion) {
+            parts.push('<div class="sp-region">' + escapeHtml(inner) + '</div>');
+          } else {
+            parts.push('<div class="sp-service">' + escapeHtml(inner) + '</div>');
+          }
+          continue;
+        }
+
+        // "     N. body, <url|Link>" — numbered item
+        const itemMatch = line.match(/^\s+(\d+)\.\s+(.*)$/);
+        if (itemMatch) {
+          const num = itemMatch[1];
+          let body = itemMatch[2];
+
+          // Extract trailing <url|label> link
+          let linkHtml = '';
+          body = body.replace(/,?\s*<(https?:\/\/[^|>]+)\|([^>]+)>/g, (_, url, label) => {
+            linkHtml = '<a class="sp-link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' + escapeHtml(label) + '</a>';
+            return '';
+          });
+          // Also handle bare <url>
+          body = body.replace(/,?\s*<(https?:\/\/[^>]+)>/g, (_, url) => {
+            if (!linkHtml) linkHtml = '<a class="sp-link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Link</a>';
+            return '';
+          });
+
+          body = body.replace(/,\s*$/, '').trim();
+
+          parts.push('<div class="sp-item">');
+          parts.push('<span class="sp-num">' + escapeHtml(num) + '.</span>');
+          parts.push('<span class="sp-body">' + escapeHtml(body) + '</span>');
+          if (linkHtml) parts.push(linkHtml);
+          parts.push('</div>');
+          continue;
+        }
+
+        // Fallback: plain line
+        parts.push('<div style="padding: 0.1rem 0; font-size:13px; color: var(--text-muted);">' + escapeHtml(line) + '</div>');
+      }
+
+      parts.push('</div>');
+      return parts.join('');
+    }
 
     function parseReportTables(text) {
       if (!text || !text.trim()) return null;
@@ -664,7 +887,7 @@
       const sections = [];
       let i = 0;
       let currentRegion = null;
-      let lastSectionTitle = null;  // service name from last "=== Name ===" before a table
+      let lastSectionTitle = null;
       while (i < lines.length) {
         const sectionTitleMatch = lines[i].match(/^=== (.+?) ===\s*$/);
         if (sectionTitleMatch) {
@@ -739,10 +962,76 @@
       return { region: r, service: svc };
     }
 
+    function slackEscapeMrkdwn(s) {
+      return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function slackMrkdwnLink(url, label) {
+      const u = String(url || '').trim();
+      if (!/^https?:\/\//i.test(u)) return '';
+      const safe = u.replace(/\|/g, '%7C');
+      return '<' + safe + '|' + slackEscapeMrkdwn(label) + '>';
+    }
+
+    function slackBoldSafe(s) {
+      return slackEscapeMrkdwn(s).replace(/\*/g, '·');
+    }
+
+    function reportSectionsToSlackMrkdwn(sections) {
+      if (!sections || !sections.length) return '';
+      const ctx = lastRunContext || getRunContextSummary();
+      const byRegion = new Map();
+      for (const sec of sections) {
+        const secRegion = sec.region != null ? sec.region : ctx.region;
+        const secTitle = sec.title != null ? sec.title : (ctx.service !== '—' ? ctx.service : '—');
+        if (!byRegion.has(secRegion)) byRegion.set(secRegion, []);
+        byRegion.get(secRegion).push({ title: secTitle, rows: sec.rows });
+      }
+      const lines = [];
+      let firstRegion = true;
+      for (const [regionName, blocks] of byRegion) {
+        if (!firstRegion) lines.push('');
+        firstRegion = false;
+        lines.push('*' + slackBoldSafe(String(regionName).toUpperCase()) + '*');
+        lines.push('');
+        for (const block of blocks) {
+          lines.push('*' + slackBoldSafe(block.title) + '*');
+          let num = 1;
+          for (const row of block.rows) {
+            const ts = row[0] != null ? String(row[0]) : '';
+            const cnt = row[1] != null ? String(row[1]) : '';
+            const msg = row[2] != null ? String(row[2]) : '';
+            const lnk = row[3] != null ? String(row[3]).trim() : '';
+            const parts = [];
+            if (ts) parts.push(ts);
+            if (cnt) parts.push('count: ' + cnt);
+            if (msg) parts.push(msg.replace(/\s+/g, ' ').trim());
+            let body = parts.length ? parts.join(', ') : '—';
+            body = slackEscapeMrkdwn(body);
+            let item = '     ' + num + '. ' + body;
+            if (lnk && /^https?:\/\//i.test(lnk)) {
+              const link = slackMrkdwnLink(lnk, 'Link');
+              if (link) item += ', ' + link;
+            }
+            lines.push(item);
+            num += 1;
+          }
+          lines.push('');
+        }
+      }
+      return lines.join('\n').replace(/\n+$/, '');
+    }
+
+    function slackCopyIconSvg() {
+      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    }
+
     function renderReportAsHtml(text) {
       const sections = parseReportTables(text);
       lastReportSections = sections;
+      lastSlackMrkdwn = '';
       if (!sections) return null;
+      lastSlackMrkdwn = reportSectionsToSlackMrkdwn(sections);
       const ctx = lastRunContext || getRunContextSummary();
       const parts = [];
       parts.push('<div class="report-context"><strong>Region:</strong> ' + escapeHtml(ctx.region) + ' &nbsp;|&nbsp; <strong>Service:</strong> ' + escapeHtml(ctx.service) + '</div>');
@@ -777,6 +1066,23 @@
         parts.push('</tbody></table>');
       }
       parts.push('</div>');
+
+      // ── Slack preview panel (rendered by default, raw toggle available) ──
+      const renderedHtml = renderSlackMrkdwnToHtml(lastSlackMrkdwn);
+      parts.push('<div class="slack-preview-wrap">');
+      parts.push('<div class="slack-preview-header">');
+      parts.push('<span>Slack preview</span>');
+      parts.push('<div class="slack-preview-header-actions">');
+      parts.push('<button type="button" class="btn-toggle-raw" title="Toggle raw mrkdwn">Raw mrkdwn</button>');
+      parts.push('<button type="button" class="btn-copy-slack" title="Copy Slack message" aria-label="Copy Slack message">' + slackCopyIconSvg() + '</button>');
+      parts.push('</div>');
+      parts.push('</div>');
+      // Rendered view (default)
+      parts.push(renderedHtml);
+      // Raw view (hidden by default)
+      parts.push('<pre class="slack-preview-raw" id="slackPreview">' + escapeHtml(lastSlackMrkdwn) + '</pre>');
+      parts.push('</div>');
+
       return parts.join('');
     }
 
@@ -1036,6 +1342,89 @@
       statusEl.style.display = 'none';
     }
 
+    // ── Report wrap click delegation (Fix, copy-slack, raw toggle) ──────────
+    reportWrap.addEventListener('click', (e) => {
+      // Raw mrkdwn toggle
+      const toggleBtn = e.target.closest('.btn-toggle-raw');
+      if (toggleBtn) {
+        e.preventDefault();
+        const wrap = toggleBtn.closest('.slack-preview-wrap');
+        if (!wrap) return;
+        const rendered = wrap.querySelector('.slack-preview-rendered');
+        const raw = wrap.querySelector('.slack-preview-raw');
+        if (!rendered || !raw) return;
+        const showingRaw = raw.classList.contains('visible');
+        raw.classList.toggle('visible', !showingRaw);
+        rendered.classList.toggle('hidden', !showingRaw);
+        toggleBtn.classList.toggle('active', !showingRaw);
+        toggleBtn.textContent = showingRaw ? 'Raw mrkdwn' : 'Preview';
+        return;
+      }
+
+      // Copy slack mrkdwn
+      const copySlackBtn = e.target.closest('.btn-copy-slack');
+      if (copySlackBtn) {
+        e.preventDefault();
+        if (!lastSlackMrkdwn) return;
+        const doCopy = () => {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(lastSlackMrkdwn).then(() => true).catch(() => false);
+          }
+          const ta = document.createElement('textarea');
+          ta.value = lastSlackMrkdwn;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            return Promise.resolve(ok);
+          } catch (err) {
+            document.body.removeChild(ta);
+            return Promise.resolve(false);
+          }
+        };
+        doCopy().then(ok => {
+          copySlackBtn.classList.toggle('copied', ok);
+          copySlackBtn.setAttribute('title', ok ? 'Copied!' : 'Copy failed');
+          setTimeout(() => {
+            copySlackBtn.classList.remove('copied');
+            copySlackBtn.setAttribute('title', 'Copy Slack message');
+          }, 1500);
+        });
+        return;
+      }
+
+      // Fix button
+      const btn = e.target.closest('.btn-fix');
+      if (!btn) return;
+      e.preventDefault();
+      const fixRegion = btn.dataset.region || '';
+      const service = btn.dataset.service || '';
+      const timestamp = btn.dataset.ts || '';
+      const count = btn.dataset.count || '';
+      const errorMsg = btn.dataset.msg || '';
+      const link = btn.dataset.link || '';
+      fetch('/api/fix-error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ region: fixRegion, service, timestamp, count, error_msg: errorMsg, link }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            showStatus(data.message || 'Fix started.', 'success');
+            if (!data.script_started && data.command && navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(data.command).catch(() => {});
+            }
+          } else {
+            showStatus(data.error || 'Fix failed', 'error');
+          }
+        })
+        .catch(err => showStatus('Request failed: ' + err.message, 'error'));
+    });
+
     btnRun.addEventListener('click', async () => {
       const cid = customerId.value.trim();
       const key = apiKey.value.trim();
@@ -1071,6 +1460,7 @@
       saveCredentials();
       lastReportText = '';
       lastReportSections = null;
+      lastSlackMrkdwn = '';
       lastRunContext = getRunContextSummary();
       reportWrap.innerHTML = '<div class="loading-block">' +
         '<div class="loading-spinner"></div>' +
@@ -1103,7 +1493,7 @@
           return;
         }
 
-        // Async job: poll until done or failed (avoids platform request timeout e.g. Render ~30s)
+        // Async job polling
         if (data.job_id) {
           const jobId = data.job_id;
           const poll = async () => {
@@ -1127,6 +1517,7 @@
               showStatus(sdata.error || 'Run failed.', 'error');
               lastReportSections = null;
               const html = reportContent ? renderReportAsHtml(reportContent) : null;
+              if (!reportContent) lastSlackMrkdwn = '';
               if (html) reportWrap.innerHTML = html;
               else reportWrap.innerHTML = '<pre id="report">' + (reportContent ? escapeHtml(reportContent) : '') + '</pre>';
               return;
@@ -1143,7 +1534,7 @@
           return;
         }
 
-        // Fallback: synchronous response (report/error in same response)
+        // Synchronous fallback
         hideStatus();
         btnRun.disabled = false;
         const reportContent = data.report || (data.error && data.report) || '';
@@ -1152,6 +1543,7 @@
           showStatus(data.error, 'error');
           lastReportSections = null;
           const html = reportContent ? renderReportAsHtml(reportContent) : null;
+          if (!reportContent) lastSlackMrkdwn = '';
           if (html) reportWrap.innerHTML = html;
           else reportWrap.innerHTML = '<pre id="report">' + (reportContent ? escapeHtml(reportContent) : '') + '</pre>';
           return;
@@ -1197,39 +1589,8 @@
       }
     }
 
-    reportWrap.addEventListener('click', (e) => {
-      const btn = e.target.closest('.btn-fix');
-      if (!btn) return;
-      e.preventDefault();
-      const region = btn.dataset.region || '';
-      const service = btn.dataset.service || '';
-      const timestamp = btn.dataset.ts || '';
-      const count = btn.dataset.count || '';
-      const errorMsg = btn.dataset.msg || '';
-      const link = btn.dataset.link || '';
-      fetch('/api/fix-error', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ region, service, timestamp, count, error_msg: errorMsg, link }),
-      })
-        .then(r => r.json())
-        .then(data => {
-          if (data.success) {
-            showStatus(data.message || 'Fix started.', 'success');
-            if (!data.script_started && data.command && navigator.clipboard && navigator.clipboard.writeText) {
-              navigator.clipboard.writeText(data.command).catch(() => {});
-            }
-          } else {
-            showStatus(data.error || 'Fix failed', 'error');
-          }
-        })
-        .catch(err => showStatus('Request failed: ' + err.message, 'error'));
-    });
-
     btnCopy.addEventListener('click', () => {
-      if (!lastReportText) {
-        return;
-      }
+      if (!lastReportText) return;
       copyReportToClipboard().then(ok => {
         const t = btnCopy.textContent;
         btnCopy.textContent = ok ? 'Copied' : 'Copy failed';

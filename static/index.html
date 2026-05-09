@@ -249,8 +249,128 @@
       font-size: 12px;
       color: var(--text-muted);
     }
+    /* Post-run summary: volume + staleness-ish hint */
+    .report-health {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.65rem 1.25rem;
+      padding: 0.65rem 1rem;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    .report-health-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1.25rem;
+      align-items: center;
+      flex: 1;
+      min-width: 0;
+    }
+    .report-health-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .report-health-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .report-health--ok .report-health-dot { background: var(--success); box-shadow: 0 0 0 3px rgba(63, 185, 80, 0.2); }
+    .report-health--ok .report-health-label { color: var(--success); }
+    .report-health--warn .report-health-dot { background: #d29922; box-shadow: 0 0 0 3px rgba(210, 153, 34, 0.22); }
+    .report-health--warn .report-health-label { color: #d29922; }
+    .report-health--bad .report-health-dot { background: var(--required); box-shadow: 0 0 0 3px rgba(248, 81, 73, 0.2); }
+    .report-health--bad .report-health-label { color: var(--required); }
+    .report-health-metric { color: var(--text-muted); }
+    .report-health-metric strong { color: var(--text); font-weight: 500; margin-left: 0.25rem; }
+    .report-health-muted { font-size: 11px; color: var(--text-muted); opacity: 0.9; }
     .report-tables .col-region, .report-tables .col-svc { white-space: nowrap; }
     .report-tables .col-fix { white-space: nowrap; width: 1%; }
+
+    /* Service accordion: Application vs Infrastructure */
+    details.svc-bundle {
+      margin-bottom: 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.15);
+    }
+    details.svc-bundle > summary.svc-bundle-summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 0.55rem 0.85rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 1rem;
+      align-items: center;
+      user-select: none;
+    }
+    details.svc-bundle > summary.svc-bundle-summary::-webkit-details-marker { display: none; }
+    details.svc-bundle > summary.svc-bundle-summary::before {
+      content: '';
+      width: 0;
+      height: 0;
+      border-left: 5px solid var(--text-muted);
+      border-top: 4px solid transparent;
+      border-bottom: 4px solid transparent;
+      transition: transform 0.15s;
+      transform: rotate(0deg);
+      margin-right: 0.35rem;
+    }
+    details.svc-bundle[open] > summary.svc-bundle-summary::before {
+      transform: rotate(90deg);
+    }
+    .svc-bundle-chips {
+      font-weight: 500;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .svc-bundle-body {
+      padding: 0 0.75rem 0.85rem;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+    }
+    details.svc-sub {
+      margin-top: 0.65rem;
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    details.svc-sub > summary.svc-sub-summary {
+      cursor: pointer;
+      padding: 0.45rem 0.75rem;
+      font-weight: 500;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      list-style: none;
+      user-select: none;
+    }
+    details.svc-sub > summary.svc-sub-summary::-webkit-details-marker { display: none; }
+    details.svc-sub > summary.svc-sub-summary span.svc-count-pill {
+      font-weight: 400;
+      font-size: 11px;
+      margin-left: 0.35rem;
+      opacity: 0.9;
+    }
+    details.svc-sub .svc-sub-table-wrap {
+      padding: 0 0.5rem 0.65rem;
+    }
+    details.svc-sub > summary.svc-sub-summary::before {
+      content: '▸ ';
+      color: var(--accent);
+    }
+    details.svc-sub[open] > summary.svc-sub-summary::before {
+      content: '▾ ';
+    }
+    .svc-bundle-body table { margin-bottom: 0; }
 
     /* ── Slack preview panel ── */
     .slack-preview-wrap {
@@ -674,6 +794,9 @@
           <p>Same as All regions: runs the dashboard check for <strong>every service in every region</strong>. Use when you want a full sweep. May take several minutes.</p>
           <h3>Infrastructure sections</h3>
           <p>For services that define an <strong>infra</strong> pipeline in the config, the report adds a matching block titled <strong>… (Infrastructure)</strong> immediately after that service&apos;s usual error table, using the same table format and links.</p>
+          <h3>Report layout</h3>
+          <p>A <strong>health strip</strong> sums application vs infrastructure event totals (counts in tables), how many services have at least one error row, newest timestamp (IST parsed from cells), with <strong>Clear / Watch / High volume</strong> based on total volume (&le;50 = Watch, otherwise High volume; recent timestamps add a hint).</p>
+          <p>Long runs collapse per service into an <strong>accordion</strong> (nested <strong>Application</strong> vs <strong>Infrastructure</strong>); single-table runs stay flat when only one pane is shown.</p>
           <h3>Tip</h3>
           <p>After choosing a mode, click <strong>Run dashboard check</strong>. The report appears below; you can then Copy, Download, or Send me a Slack.</p>
         </div>
@@ -883,6 +1006,198 @@
       return parts.join('');
     }
 
+    var HEALTH_YELLOW_MAX_EVENTS = 50;
+    var HEALTH_RECENT_MIN = 90;
+
+    function stripInfrastructureTitle(title) {
+      const t = (title || '').trim();
+      const m = t.match(/^(.*) \(Infrastructure\)$/);
+      return m ? m[1].trim() : t;
+    }
+
+    function isInfrastructureSection(sec) {
+      return / \(Infrastructure\)$/.test((sec.title || '').trim());
+    }
+
+    function sectionEventSum(sec) {
+      if (!sec || !sec.rows) return 0;
+      let s = 0;
+      for (const row of sec.rows) {
+        const n = parseInt(row[1], 10);
+        if (!isNaN(n)) s += n;
+      }
+      return s;
+    }
+
+    function parseIstCellToDate(s) {
+      if (!s || s === 'N/A') return null;
+      const m = String(s).match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}(?::\d{2})?)\s+IST$/);
+      if (!m) return null;
+      const iso = m[1] + 'T' + (m[2].length === 5 ? m[2] + ':00' : m[2]);
+      try {
+        return new Date(iso + '+05:30');
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function computeReportHealth(sections, ctxRegion) {
+      let appEventTotal = 0;
+      let infraEventTotal = 0;
+      const affectedKeys = new Set();
+      let newest = null;
+
+      for (const sec of sections) {
+        if (!sec.rows || sec.rows.length === 0) continue;
+        const r = sec.region != null ? sec.region : ctxRegion;
+        const base = stripInfrastructureTitle(sec.title || '');
+        affectedKeys.add(r + '\0' + base);
+        const sum = sectionEventSum(sec);
+        if (isInfrastructureSection(sec)) infraEventTotal += sum;
+        else appEventTotal += sum;
+        for (const row of sec.rows) {
+          const d = parseIstCellToDate(row[0]);
+          if (d && (!newest || d > newest)) newest = d;
+        }
+      }
+
+      const grand = appEventTotal + infraEventTotal;
+      let level = 'ok';
+      if (grand <= 0) level = 'ok';
+      else if (grand <= HEALTH_YELLOW_MAX_EVENTS) level = 'warn';
+      else level = 'bad';
+
+      const now = Date.now();
+      let recentNote = '';
+      if (newest && grand > 0) {
+        const ageMin = (now - newest.getTime()) / 60000;
+        if (ageMin >= 0 && ageMin <= HEALTH_RECENT_MIN) {
+          recentNote = 'Latest activity within the last ' + HEALTH_RECENT_MIN + ' minutes.';
+          if (level === 'ok' && grand > 0) level = 'warn';
+        }
+      }
+
+      const label =
+        grand <= 0 ? 'Clear'
+          : level === 'bad' ? 'High volume'
+          : level === 'warn' ? 'Watch'
+          : 'Clear';
+
+      const newestDisplay = newest
+        ? newest.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          }) + ' IST'
+        : '—';
+
+      return {
+        appEventTotal,
+        infraEventTotal,
+        grand,
+        affectedCount: affectedKeys.size,
+        newestDisplay,
+        level,
+        label,
+        recentNote,
+      };
+    }
+
+    function bundleReportSections(sections, ctxRegion) {
+      const out = [];
+      let i = 0;
+      while (i < sections.length) {
+        const s = sections[i];
+        const rDefault = ctxRegion || '—';
+        const r = s.region != null ? s.region : rDefault;
+        const t = (s.title || '').trim();
+        const nm = t.match(/^(.*) \(Infrastructure\)$/);
+        if (nm) {
+          out.push({ region: r, baseName: nm[1].trim(), app: null, infra: s });
+          i++;
+          continue;
+        }
+        const next = sections[i + 1];
+        const bundle = { region: r, baseName: t, app: s, infra: null };
+        if (next) {
+          const rn = next.region != null ? next.region : rDefault;
+          const tn = (next.title || '').trim();
+          const nmn = tn.match(/^(.*) \(Infrastructure\)$/);
+          if (rn === r && nmn && nmn[1].trim() === t) {
+            bundle.infra = next;
+            i += 2;
+            out.push(bundle);
+            continue;
+          }
+        }
+        i++;
+        out.push(bundle);
+      }
+      return out;
+    }
+
+    function useAccordionForBundles(bundles) {
+      if (!bundles || bundles.length === 0) return false;
+      if (bundles.length > 1) return true;
+      const b = bundles[0];
+      const hasInfraRows = !!(b.infra && b.infra.rows && b.infra.rows.length);
+      const hasAppRows = !!(b.app && b.app.rows && b.app.rows.length);
+      return hasInfraRows && hasAppRows;
+    }
+
+    function renderSectionTable(sec, ctx) {
+      const secRegion = sec.region != null ? sec.region : ctx.region;
+      const secTitle = sec.title != null ? sec.title : (ctx.service !== '—' ? ctx.service : '—');
+      const parts = [];
+      parts.push('<table><thead><tr><th>Region</th><th>Service</th>');
+      for (const h of sec.headers) parts.push('<th>' + escapeHtml(h) + '</th>');
+      parts.push('<th>Fix</th></tr></thead><tbody>');
+      const colClass = ['col-ts', 'col-count', 'col-msg', 'col-link'];
+      for (const row of sec.rows) {
+        const ts = row[0] || '';
+        const cnt = row[1] != null ? String(row[1]) : '';
+        const msg = row[2] || '';
+        const lnk = row[3] || '';
+        parts.push('<tr>');
+        parts.push('<td class="col-region">' + escapeHtml(secRegion) + '</td>');
+        parts.push('<td class="col-svc">' + escapeHtml(secTitle) + '</td>');
+        row.forEach((cell, idx) => {
+          const cls = colClass[idx] || '';
+          if (idx === row.length - 1 && cell.startsWith('http')) {
+            parts.push('<td class="' + cls + '"><a href="' + escapeHtml(cell) + '" target="_blank" rel="noopener">Open</a></td>');
+          } else {
+            parts.push('<td class="' + cls + '">' + escapeHtml(cell) + '</td>');
+          }
+        });
+        parts.push('<td class="col-fix"><button type="button" class="btn-fix" data-region="' + escapeAttr(secRegion) + '" data-service="' + escapeAttr(secTitle) + '" data-ts="' + escapeAttr(ts) + '" data-count="' + escapeAttr(cnt) + '" data-msg="' + escapeAttr(msg) + '" data-link="' + escapeAttr(lnk) + '">Fix</button></td>');
+        parts.push('</tr>');
+      }
+      parts.push('</tbody></table>');
+      return parts.join('');
+    }
+
+    function renderHealthStrip(health) {
+      const cls = 'report-health report-health--' + health.level;
+      const parts = [];
+      parts.push('<div class="' + cls + '" role="status">');
+      parts.push('<div class="report-health-badge"><span class="report-health-dot" aria-hidden="true"></span><span class="report-health-label">' + escapeHtml(health.label) + '</span></div>');
+      parts.push('<div class="report-health-metrics">');
+      parts.push('<span class="report-health-metric">App events<strong>' + escapeHtml(String(health.appEventTotal)) + '</strong></span>');
+      parts.push('<span class="report-health-metric">Infra events<strong>' + escapeHtml(String(health.infraEventTotal)) + '</strong></span>');
+      parts.push('<span class="report-health-metric">Services with errors<strong>' + escapeHtml(String(health.affectedCount)) + '</strong></span>');
+      parts.push('<span class="report-health-metric">Newest<strong>' + escapeHtml(health.newestDisplay) + '</strong></span>');
+      parts.push('</div>');
+      if (health.recentNote) {
+        parts.push('<span class="report-health-muted">' + escapeHtml(health.recentNote.trim()) + '</span>');
+      }
+      parts.push('</div>');
+      return parts.join('');
+    }
+
     function parseReportTables(text) {
       if (!text || !text.trim()) return null;
       const lines = text.split('\n');
@@ -1035,38 +1350,66 @@
       if (!sections) return null;
       lastSlackMrkdwn = reportSectionsToSlackMrkdwn(sections);
       const ctx = lastRunContext || getRunContextSummary();
+      const ctxRegion = (ctx.region && String(ctx.region).trim()) || 'aws-na';
       const parts = [];
       parts.push('<div class="report-context"><strong>Region:</strong> ' + escapeHtml(ctx.region) + ' &nbsp;|&nbsp; <strong>Service:</strong> ' + escapeHtml(ctx.service) + '</div>');
+      parts.push(renderHealthStrip(computeReportHealth(sections, ctxRegion)));
+
+      const bundles = bundleReportSections(sections, ctxRegion);
+      const accordion = useAccordionForBundles(bundles);
+
       parts.push('<div class="report-tables">');
-      for (const sec of sections) {
-        const secRegion = sec.region != null ? sec.region : ctx.region;
-        const secTitle = sec.title != null ? sec.title : (ctx.service !== '—' ? ctx.service : '—');
-        if (sec.title || ctx.service) parts.push('<div class="section-title">' + escapeHtml(sec.title || ctx.service || '') + (secRegion ? ' · ' + escapeHtml(secRegion) : '') + '</div>');
-        parts.push('<table><thead><tr><th>Region</th><th>Service</th>');
-        for (const h of sec.headers) parts.push('<th>' + escapeHtml(h) + '</th>');
-        parts.push('<th>Fix</th></tr></thead><tbody>');
-        const colClass = ['col-ts', 'col-count', 'col-msg', 'col-link'];
-        for (const row of sec.rows) {
-          const ts = row[0] || '';
-          const cnt = row[1] != null ? String(row[1]) : '';
-          const msg = row[2] || '';
-          const lnk = row[3] || '';
-          parts.push('<tr>');
-          parts.push('<td class="col-region">' + escapeHtml(secRegion) + '</td>');
-          parts.push('<td class="col-svc">' + escapeHtml(secTitle) + '</td>');
-          row.forEach((cell, idx) => {
-            const cls = colClass[idx] || '';
-            if (idx === row.length - 1 && cell.startsWith('http')) {
-              parts.push('<td class="' + cls + '"><a href="' + escapeHtml(cell) + '" target="_blank" rel="noopener">Open</a></td>');
-            } else {
-              parts.push('<td class="' + cls + '">' + escapeHtml(cell) + '</td>');
-            }
-          });
-          parts.push('<td class="col-fix"><button type="button" class="btn-fix" data-region="' + escapeAttr(secRegion) + '" data-service="' + escapeAttr(secTitle) + '" data-ts="' + escapeAttr(ts) + '" data-count="' + escapeAttr(cnt) + '" data-msg="' + escapeAttr(msg) + '" data-link="' + escapeAttr(lnk) + '">Fix</button></td>');
-          parts.push('</tr>');
+      if (!accordion && bundles.length === 1) {
+        const b0 = bundles[0];
+        const reg = b0.region ? ' · ' + b0.region : '';
+        if (b0.app && b0.app.rows && b0.app.rows.length) {
+          parts.push('<div class="section-title">' + escapeHtml((b0.app.title || ctx.service) + reg) + '</div>');
+          parts.push(renderSectionTable(b0.app, ctx));
         }
-        parts.push('</tbody></table>');
+        if (b0.infra && b0.infra.rows && b0.infra.rows.length) {
+          parts.push('<div class="section-title">' + escapeHtml((b0.infra.title || (b0.baseName + ' (Infrastructure)')) + reg) + '</div>');
+          parts.push(renderSectionTable(b0.infra, ctx));
+        }
+      } else {
+        bundles.forEach((b, bundleIdx) => {
+          const sumAppEvents = sectionEventSum(b.app);
+          const sumInfraEvents = sectionEventSum(b.infra);
+          const sigApp = b.app ? b.app.rows.length : 0;
+          const sigInfra = b.infra ? b.infra.rows.length : 0;
+          const headline = escapeHtml(b.baseName) + (b.region ? ' · ' + escapeHtml(b.region) : '');
+          const chips =
+            '<span class="svc-bundle-chips">' +
+            (b.app ? 'Application: ' + sumAppEvents + ' events · ' + sigApp + ' signature(s)' : 'Application: none') +
+            ' · ' +
+            (b.infra ? 'Infra: ' + sumInfraEvents + ' · ' + sigInfra + ' signature(s)' : 'Infra: none') +
+            '</span>';
+
+          parts.push('<details class="svc-bundle"' + (bundleIdx === 0 ? ' open' : '') + '>');
+          parts.push('<summary class="svc-bundle-summary">' + headline + ' ' + chips + '</summary>');
+          parts.push('<div class="svc-bundle-body">');
+
+          if (b.app && b.app.rows && b.app.rows.length) {
+            parts.push('<details class="svc-sub" open>');
+            parts.push('<summary class="svc-sub-summary">Application<span class="svc-count-pill">(' + sumAppEvents + ' events)</span></summary>');
+            parts.push('<div class="svc-sub-table-wrap">' + renderSectionTable(b.app, ctx) + '</div>');
+            parts.push('</details>');
+          } else if (accordion && b.infra && b.infra.rows && b.infra.rows.length) {
+            parts.push('<p class="report-health-muted" style="margin:0.65rem 0 0;padding:0 0.25rem">No application errors in this window (infra only).</p>');
+          }
+
+          if (b.infra && b.infra.rows && b.infra.rows.length) {
+            parts.push('<details class="svc-sub"' + (b.app && b.app.rows && b.app.rows.length ? '' : ' open') + '>');
+            parts.push('<summary class="svc-sub-summary">Infrastructure<span class="svc-count-pill">(' + sumInfraEvents + ' events)</span></summary>');
+            parts.push('<div class="svc-sub-table-wrap">' + renderSectionTable(b.infra, ctx) + '</div>');
+            parts.push('</details>');
+          } else if (accordion && b.app && b.app.rows && b.app.rows.length) {
+            parts.push('<p class="report-health-muted" style="margin:0.65rem 0 0;padding:0 0.25rem">No infrastructure rollup for this service in this window.</p>');
+          }
+
+          parts.push('</div></details>');
+        });
       }
+
       parts.push('</div>');
 
       // ── Slack preview panel (rendered by default, raw toggle available) ──

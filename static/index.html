@@ -672,6 +672,8 @@
           <p>Run the check for all services across <strong>all regions</strong> (e.g. aws-na, aws-eu, azure-na, azure-eu, gcp-na, gcp-eu, aws-au). Produces a combined report grouped by region. Can take longer.</p>
           <h3>Auto (all services × all regions)</h3>
           <p>Same as All regions: runs the dashboard check for <strong>every service in every region</strong>. Use when you want a full sweep. May take several minutes.</p>
+          <h3>Infrastructure sections</h3>
+          <p>For services that define an <strong>infra</strong> pipeline in the config, the report adds a matching block titled <strong>… (Infrastructure)</strong> immediately after that service&apos;s usual error table, using the same table format and links.</p>
           <h3>Tip</h3>
           <p>After choosing a mode, click <strong>Run dashboard check</strong>. The report appears below; you can then Copy, Download, or Send me a Slack.</p>
         </div>

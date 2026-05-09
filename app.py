@@ -439,6 +439,7 @@ def run_dashboard_check(env_vars, options):
         svc = next((s for s in services if (s.get("name") or s.get("service_name", "")) == selected_service), None)
         if not svc:
             return False, "", f"Unknown service: {selected_service!r}. Check services.sample.json."
+        cmd.extend(["--service-name", selected_service])
         cmd.extend(["--workspace", str(svc.get("workspace_id", ""))])
         cmd.extend(["--dataset", str(svc.get("dataset_id", ""))])
         pipeline_file = svc.get("pipeline_file")
@@ -446,6 +447,11 @@ def run_dashboard_check(env_vars, options):
             path = Path(pipeline_file)
             full_path = path if path.is_absolute() else (SCRIPT_DIR / pipeline_file)
             cmd.extend(["--pipeline-file", str(full_path)])
+        infra_pipeline_file = svc.get("infra_pipeline_file")
+        if infra_pipeline_file:
+            ipath = Path(infra_pipeline_file)
+            ifull = ipath if ipath.is_absolute() else (SCRIPT_DIR / infra_pipeline_file)
+            cmd.extend(["--infra-pipeline-file", str(ifull)])
     else:
         if options.get("workspace"):
             cmd.extend(["--workspace", str(options["workspace"])])

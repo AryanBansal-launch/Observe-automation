@@ -225,6 +225,8 @@ if __name__ == "__main__":
     parser.add_argument("--start", type=str, default=None, help="Start time in IST (YYYY-MM-DD HH:MM:SS). Default: last 24h. Env: START_IST")
     parser.add_argument("--end", type=str, default=None, help="End time in IST (YYYY-MM-DD HH:MM:SS). Default: last 24h. Env: END_IST")
     parser.add_argument("--pipeline-file", "-p", type=str, default=None, help="Path to OPAL pipeline file for this service (default pipeline used if omitted)")
+    parser.add_argument("--infra-pipeline-file", type=str, default=None, help="Optional second pipeline (infra); appended after primary for single-service runs")
+    parser.add_argument("--service-name", type=str, default=None, help="Display name for report section headers on single-service runs (required for infra title to match config name)")
     parser.add_argument("--config", "-c", type=str, default=None, help="JSON file defining multiple services; each may have pipeline_file or pipeline (see below)")
     parser.add_argument("--all-services", action="store_true", help=f"Run for all services (uses {DEFAULT_SERVICES_CONFIG} next to this script, or in cwd)")
     parser.add_argument("--all-regions", action="store_true", help="Run for all regions (aws-na, aws-eu, aws-au, azure-na, azure-eu, gcp-na, gcp-eu); combines with --config/--all-services or single-service")
@@ -277,11 +279,45 @@ if __name__ == "__main__":
                 table_str, _ = get_unique_errors(workspace_id=w, dataset_id=d, service_name=name, opal_pipeline=pipeline, time_start_ist=time_start, time_end_ist=time_end, region_override=region_override)
                 if table_str:
                     out.append(f"\n=== {name} ===\n{table_str}")
+                infra_path = svc.get("infra_pipeline_file")
+                if infra_path:
+                    infra_pl = load_pipeline(infra_path)
+                    if infra_pl:
+                        infra_str, _ = get_unique_errors(
+                            workspace_id=w,
+                            dataset_id=d,
+                            service_name=f"{name} (Infrastructure)",
+                            opal_pipeline=infra_pl,
+                            time_start_ist=time_start,
+                            time_end_ist=time_end,
+                            region_override=region_override,
+                        )
+                        if infra_str:
+                            out.append(f"\n=== {name} (Infrastructure) ===\n{infra_str}")
         else:
             pipeline = load_pipeline(args.pipeline_file) if args.pipeline_file else None
             table_str, _ = get_unique_errors(workspace_id=args.workspace, dataset_id=args.dataset, opal_pipeline=pipeline, time_start_ist=time_start, time_end_ist=time_end, region_override=region_override)
+            chunks = []
             if table_str:
-                out.append(table_str)
+                chunks.append(table_str)
+            if args.infra_pipeline_file:
+                infra_pl = load_pipeline(args.infra_pipeline_file)
+                if infra_pl:
+                    label = (args.service_name or "").strip()
+                    infra_title = f"{label} (Infrastructure)" if label else "Infrastructure errors"
+                    infra_str, _ = get_unique_errors(
+                        workspace_id=args.workspace,
+                        dataset_id=args.dataset,
+                        service_name=infra_title,
+                        opal_pipeline=infra_pl,
+                        time_start_ist=time_start,
+                        time_end_ist=time_end,
+                        region_override=region_override,
+                    )
+                    if infra_str:
+                        chunks.append(f"\n=== {infra_title} ===\n{infra_str}")
+            if chunks:
+                out.append("\n".join(chunks))
         return out
 
     if args.all_regions:
